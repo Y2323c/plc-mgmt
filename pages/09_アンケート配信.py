@@ -124,7 +124,7 @@ with col_url:
     if st.button("URLリストを生成", type="secondary", disabled=(len(selected_members) == 0)):
         lines = []
         for m in selected_members:
-            url = f"{base_url.rstrip('/')}/survey?event_id={event_id}&user_id={m['id']}"
+            url = f"{base_url.rstrip('/')}/?event_id={event_id}&user_id={m['id']}"
             lines.append(f"{m['display_name']}\n{url}")
         st.text_area(
             "コピーしてChatworkなどに貼り付けてください",
@@ -152,7 +152,7 @@ with col_cw:
 
         for i, m in enumerate(cw_targets):
             progress.progress((i + 1) / total, text=f"送信中… {m['display_name']} ({i+1}/{total})")
-            url = f"{base_url.rstrip('/')}/survey?event_id={event_id}&user_id={m['id']}"
+            url = f"{base_url.rstrip('/')}/?event_id={event_id}&user_id={m['id']}"
             body = message_template.replace("[name]", m["display_name"]).replace("[url]", url)
             room_id = dm_map.get(str(m["cw_account"]))
 
