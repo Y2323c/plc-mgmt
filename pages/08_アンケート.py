@@ -78,11 +78,12 @@ current_status = existing["status"] if existing else None
 if current_status in STATUS_LABELS:
     st.info(f"現在の回答: **{STATUS_LABELS[current_status]}**")
 
+current_label = STATUS_LABELS.get(current_status, "")
 answer = st.radio(
     "ご参加の予定を教えてください",
     list(SURVEY_OPTIONS.keys()),
-    index=None if current_status not in STATUS_LABELS
-          else list(SURVEY_OPTIONS.keys()).index(STATUS_LABELS[current_status]),
+    index=list(SURVEY_OPTIONS.keys()).index(current_label)
+          if current_label in SURVEY_OPTIONS else None,
     horizontal=True,
 )
 
