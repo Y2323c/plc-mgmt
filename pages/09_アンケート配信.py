@@ -89,8 +89,15 @@ st.subheader("配信設定")
 
 base_url = st.text_input(
     "公開アプリのベースURL",
-    value="http://localhost:8501",
-    help="Streamlit Cloud にデプロイ後はそのURLに変更してください",
+    value="https://plc-mgmt-zndsegnd3csnyf48tnmzfb.streamlit.app",
+)
+
+# チェックインURL（当日担当者に共有）
+checkin_url = f"{base_url.rstrip('/')}/checkin?event_id={event_id}"
+st.text_input(
+    "チェックインURL（当日担当者に共有）",
+    value=checkin_url,
+    help="このURLを当日のチェックイン担当者に送ってください。開くとイベントが自動選択された状態で表示されます。",
 )
 
 DEFAULT_TEMPLATE = """[name]さん、こんにちは。
@@ -117,7 +124,7 @@ with col_url:
     if st.button("URLリストを生成", type="secondary", disabled=(len(selected_members) == 0)):
         lines = []
         for m in selected_members:
-            url = f"{base_url.rstrip('/')}/出欠アンケート?event_id={event_id}&user_id={m['id']}"
+            url = f"{base_url.rstrip('/')}/survey?event_id={event_id}&user_id={m['id']}"
             lines.append(f"{m['display_name']}\n{url}")
         st.text_area(
             "コピーしてChatworkなどに貼り付けてください",
@@ -145,7 +152,7 @@ with col_cw:
 
         for i, m in enumerate(cw_targets):
             progress.progress((i + 1) / total, text=f"送信中… {m['display_name']} ({i+1}/{total})")
-            url = f"{base_url.rstrip('/')}/出欠アンケート?event_id={event_id}&user_id={m['id']}"
+            url = f"{base_url.rstrip('/')}/survey?event_id={event_id}&user_id={m['id']}"
             body = message_template.replace("[name]", m["display_name"]).replace("[url]", url)
             room_id = dm_map.get(str(m["cw_account"]))
 
