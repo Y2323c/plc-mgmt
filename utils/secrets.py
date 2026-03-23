@@ -19,6 +19,8 @@ def get_secret(key: str) -> str:
         val = st.secrets.get(key)
         if val:
             return str(val)
-    except (ImportError, AttributeError, KeyError):
+    except Exception:
+        # secrets.toml が存在しない場合（ローカル）や
+        # StreamlitSecretNotFoundError なども含めてスキップし .env にフォールバック
         pass
     return os.environ.get(key, "")
