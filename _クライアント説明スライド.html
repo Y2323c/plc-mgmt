@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLC 管理アプリ — 機能説明</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/theme/white.css">
+<style>
+  :root {
+    --main: #111827;
+    --accent: #374151;
+    --soft: #6b7280;
+    --bg-chip: #f3f4f6;
+    --border: #e5e7eb;
+  }
+  .reveal { font-family: 'Helvetica Neue', 'Hiragino Sans', sans-serif; font-size: 22px; }
+  .reveal h1 { font-size: 1.5em; color: var(--main); font-weight: 700; margin-bottom: .15em; }
+  .reveal h2 { font-size: 1em; color: var(--main); font-weight: 600; border-bottom: 2px solid var(--border); padding-bottom: .2em; margin-bottom: .4em; }
+  .reveal h3 { font-size: .82em; color: var(--accent); font-weight: 600; margin: 0 0 .2em; }
+  .reveal p, .reveal li { font-size: .72em; color: var(--accent); line-height: 1.55; margin: 0; }
+  .reveal ul { list-style: none; padding: 0; margin: 0; }
+  .reveal ul li::before { content: "— "; color: var(--soft); }
+  .reveal section { text-align: left; padding: 10px 30px !important; }
+
+  /* タイトルスライドだけ中央揃え */
+  .title-slide { text-align: center !important; }
+  .title-slide h1 { font-size: 1.7em; margin-bottom: .15em; }
+  .title-slide .sub { color: var(--soft); font-size: .78em; }
+
+  /* カードグリッド */
+  .card-grid { display: grid; gap: .45em; }
+  .card-grid.col2 { grid-template-columns: 1fr 1fr; }
+  .card-grid.col3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card {
+    background: var(--bg-chip);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .4em .7em;
+  }
+  .card h3 { font-size: .78em; }
+  .card p, .card li { font-size: .7em; }
+
+  /* テーブル */
+  .reveal table { font-size: .72em; width: 100%; border-collapse: collapse; }
+  .reveal table th { background: var(--main); color: #fff; padding: .35em .7em; text-align: left; }
+  .reveal table td { padding: .3em .7em; border-bottom: 1px solid var(--border); }
+  .reveal table tr:last-child td { border-bottom: none; }
+
+  /* フロー */
+  .flow { display: flex; align-items: flex-start; gap: .4em; margin-top: .4em; }
+  .flow-step {
+    background: var(--bg-chip);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .35em .5em;
+    flex: 1;
+    font-size: .7em;
+  }
+  .flow-step .label { font-weight: 600; color: var(--main); display: block; margin-bottom: .15em; }
+  .flow-arrow { color: var(--soft); font-size: 1em; padding-top: .5em; flex-shrink: 0; }
+
+  /* バッジ */
+  .badge {
+    display: inline-block;
+    background: var(--main);
+    color: #fff;
+    border-radius: 4px;
+    padding: .05em .4em;
+    font-size: .65em;
+    margin-right: .3em;
+    vertical-align: middle;
+  }
+  .badge.gray { background: var(--soft); }
+
+  /* チェックリスト */
+  .checklist li::before { content: "✓  "; color: #059669; }
+
+  /* セキュリティ */
+  .lock-item { display: flex; align-items: flex-start; gap: .4em; margin-bottom: .35em; }
+  .lock-icon { font-size: .95em; flex-shrink: 0; padding-top: .05em; }
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ① タイトル -->
+<section class="title-slide">
+  <h1>PLC 管理アプリ</h1>
+  <p class="sub">会員管理・出欠アンケート・コーチング記録を<br>ブラウザ上で一元管理するシステム</p>
+  <br>
+  <p class="sub" style="font-size:.75em;">← → キーまたは画面クリックでページを進められます</p>
+</section>
+
+<!-- ② できること -->
+<section>
+  <h2>このアプリでできること</h2>
+  <div class="card-grid col2" style="margin-top:.8em;">
+    <div class="card">
+      <h3>👥 会員管理</h3>
+      <p>会員の追加・編集・ステータス管理。重複チェック・Chatwork メッセージ送信も対応。</p>
+    </div>
+    <div class="card">
+      <h3>📋 出欠アンケート</h3>
+      <p>URLを送るだけで回答収集。Chatwork 一斉送信にも対応。</p>
+    </div>
+    <div class="card">
+      <h3>✅ 当日チェックイン</h3>
+      <p>スマホから出欠をリアルタイム記録。名前検索で素早く操作。</p>
+    </div>
+    <div class="card">
+      <h3>📊 統計・レポート</h3>
+      <p>イベント別の出席率・参加者リストを自動集計。</p>
+    </div>
+    <div class="card" style="grid-column: span 2;">
+      <h3>📝 コンサル・コーチング記録</h3>
+      <p>個別・10分コンサルの実施記録、コーチングチケットとセッション記録の管理。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ③ アプリ構成 -->
+<section>
+  <h2>2つのアプリで役割を分担</h2>
+  <table style="margin-top:.8em;">
+    <tr>
+      <th></th>
+      <th>管理アプリ</th>
+      <th>公開アプリ</th>
+    </tr>
+    <tr>
+      <td><b>使う人</b></td>
+      <td>事務局</td>
+      <td>会員・当日スタッフ</td>
+    </tr>
+    <tr>
+      <td><b>アクセス</b></td>
+      <td>PC でローカル起動</td>
+      <td>URL をクリックするだけ</td>
+    </tr>
+    <tr>
+      <td><b>主な機能</b></td>
+      <td>全機能（会員管理・配信・記録など）</td>
+      <td>アンケート回答・チェックイン</td>
+    </tr>
+    <tr>
+      <td><b>ログイン</b></td>
+      <td>不要（PC が鍵）</td>
+      <td>不要（URLが個人に紐づく）</td>
+    </tr>
+  </table>
+  <p style="margin-top:.8em; color: var(--soft); font-size:.78em;">
+    ※ 同じデータベースを共有しているため、どちらで入力しても即時反映されます。
+  </p>
+</section>
+
+<!-- ④ 管理アプリ: 会員・ログ・統計 -->
+<section>
+  <h2>管理アプリ — 会員・ログ・統計</h2>
+  <div class="card-grid col3" style="margin-top:.8em;">
+    <div class="card">
+      <h3>会員管理</h3>
+      <ul>
+        <li>新規追加・情報編集</li>
+        <li>重複を自動チェック</li>
+        <li>入会メッセージ送信</li>
+        <li>在籍・休会・退会・削除予定を管理</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>受講生ログ</h3>
+      <ul>
+        <li>会員を選ぶと全履歴を一覧</li>
+        <li>WS / チーム参加履歴</li>
+        <li>コンサル・コーチング記録</li>
+        <li>「最近どんな活動？」が1画面でわかる</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>統計・レポート</h3>
+      <ul>
+        <li>イベント別出席率を自動集計</li>
+        <li>年フィルターで絞り込み</li>
+        <li>出席 / 欠席 / 未回答をグループ表示</li>
+        <li>イベントごとの参加者リスト</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ⑤ 管理アプリ: アンケート・出席管理 -->
+<section>
+  <h2>管理アプリ — アンケート配信・出席管理</h2>
+  <div class="card-grid col2" style="margin-top:.8em;">
+    <div class="card">
+      <h3>出欠アンケート配信</h3>
+      <ul>
+        <li>イベントを選ぶと個別URLを自動生成</li>
+        <li>Chatwork 一斉送信（在籍者全員に DM）</li>
+        <li>回答状況をリアルタイム確認</li>
+        <li>チェックインURLもここで確認・コピー</li>
+        <li>送信履歴を自動記録</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>出席管理（当日）</h3>
+      <ul>
+        <li>参加予定 / 欠席予定 / 未回答を表示</li>
+        <li>チェックイン状況をリアルタイム確認</li>
+        <li>確定済み人数をサマリー表示</li>
+        <li>アンケートの備考（遅刻・早退）も表示</li>
+        <li>名前検索で素早く探せる</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ⑥ 公開アプリ: アンケート -->
+<section>
+  <h2>公開アプリ — 会員がアンケートに回答する</h2>
+  <div class="flow" style="margin-top: 1em;">
+    <div class="flow-step">
+      <span class="label">① URLを開く</span>
+      Chatwork で届いたリンクをクリック
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <span class="label">② 内容を確認</span>
+      イベント名と自分の名前が表示される
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <span class="label">③ 回答を選ぶ</span>
+      「参加予定」または「欠席予定」をタップ
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <span class="label">④ 送信</span>
+      備考（遅刻・早退など）を入力して「回答を送信」
+    </div>
+  </div>
+  <p style="margin-top: 1.2em; font-size: .8em; color: var(--soft);">
+    ※ URLに個人情報が含まれるため、<b>ログイン・ID入力は不要</b>です。開くだけで回答できます。
+  </p>
+</section>
+
+<!-- ⑦ 公開アプリ: チェックイン -->
+<section>
+  <h2>公開アプリ — 当日スタッフがチェックインを記録する</h2>
+  <div class="flow" style="margin-top: 1em;">
+    <div class="flow-step">
+      <span class="label">① URLを開く</span>
+      事務局から届いたチェックインURLをスマホで開く
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <span class="label">② 名前を入力</span>
+      担当者名（自分の名前）を入力する
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <span class="label">③ 記録する</span>
+      来場した方を探して「✅ 出席」をタップ（名前検索で絞り込み可）
+    </div>
+  </div>
+  <div class="card-grid col2" style="margin-top: .8em;">
+    <div class="card">
+      <h3>参加予定の方</h3>
+      <p>名前の横に「✅ 出席」「❌ 欠席」ボタンが表示される。タップするだけで記録。</p>
+    </div>
+    <div class="card">
+      <h3>間違えた場合</h3>
+      <p>「取消」ボタンで元の状態（参加予定）に戻せる。何度でも修正可能。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ⑧ 運用フロー -->
+<section>
+  <h2>当日までの運用フロー</h2>
+  <div style="margin-top: .8em;">
+    <div class="card" style="margin-bottom: .6em;">
+      <h3><span class="badge">事前</span> イベント登録・アンケート配信</h3>
+      <p>事務局がイベントを登録 → アンケートURLを Chatwork で一斉送信 → 会員が回答</p>
+    </div>
+    <div class="card" style="margin-bottom: .6em;">
+      <h3><span class="badge">当日朝</span> チェックインURLを共有</h3>
+      <p>事務局がアンケート配信ページでチェックインURLをコピー → 当日担当者に送付</p>
+    </div>
+    <div class="card">
+      <h3><span class="badge">当日</span> チェックイン・状況確認</h3>
+      <p>担当者がスマホでチェックイン記録 → 事務局は出席管理画面でリアルタイム確認</p>
+    </div>
+  </div>
+</section>
+
+<!-- ⑨ セキュリティ -->
+<section>
+  <h2>セキュリティの考え方</h2>
+  <div style="margin-top: .8em;">
+    <div class="lock-item">
+      <div class="lock-icon">🔒</div>
+      <div>
+        <b>公開アプリは最低限の操作しかできない設計</b><br>
+        <span style="font-size: .8em; color: var(--soft);">会員情報の編集・コーチング記録の閲覧などは公開アプリからはアクセス不可。データベース側で制限しています。</span>
+      </div>
+    </div>
+    <div class="lock-item" style="margin-top: .6em;">
+      <div class="lock-icon">🔒</div>
+      <div>
+        <b>管理アプリは事務局のPCのみで動作</b><br>
+        <span style="font-size: .8em; color: var(--soft);">外部に公開されないローカルアプリのため、URLを知っていてもアクセスできません。</span>
+      </div>
+    </div>
+    <div class="lock-item" style="margin-top: .6em;">
+      <div class="lock-icon">🔒</div>
+      <div>
+        <b>データはクラウドに安全に保管</b><br>
+        <span style="font-size: .8em; color: var(--soft);">PCが故障してもデータは消えません。Supabase（データベース）を使用。</span>
+      </div>
+    </div>
+  </div>
+  <table style="margin-top: 1em; font-size: .75em;">
+    <tr><th>サービス</th><th>役割</th></tr>
+    <tr><td>Supabase</td><td>データベース（クラウド保管）</td></tr>
+    <tr><td>Streamlit Cloud</td><td>公開アプリのホスティング</td></tr>
+    <tr><td>GitHub</td><td>ソースコード管理（非公開）</td></tr>
+  </table>
+</section>
+
+<!-- ⑩ まとめ -->
+<section class="title-slide">
+  <h2 style="border: none; text-align: center; font-size: 1.4em;">まとめ</h2>
+  <div class="card-grid col2" style="margin-top: 1em; text-align: left;">
+    <div class="card">
+      <h3>事務局がやること</h3>
+      <ul class="checklist">
+        <li>会員情報の登録・更新</li>
+        <li>イベントの作成</li>
+        <li>アンケートURLの一斉送信</li>
+        <li>チェックインURLを担当者に共有</li>
+        <li>当日の出席状況を確認</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>自動でできること</h3>
+      <ul class="checklist">
+        <li>重複会員のチェック</li>
+        <li>個人ごとのアンケートURL生成</li>
+        <li>Chatwork への一斉送信</li>
+        <li>出席率の自動集計</li>
+        <li>送信履歴の記録</li>
+      </ul>
+    </div>
+  </div>
+  <p style="text-align:center; margin-top:1.2em; color:var(--soft); font-size:.78em;">
+    ご不明な点はいつでもお問い合わせください。
+  </p>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.js"></script>
+<script>
+Reveal.initialize({
+  hash: true,
+  transition: 'fade',
+  transitionSpeed: 'fast',
+  controls: true,
+  progress: true,
+  slideNumber: 'c/t',
+  center: false,
+  width: 1100,
+  height: 650,
+  margin: 0.04,
+});
+</script>
+</body>
+</html>
