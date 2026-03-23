@@ -9,16 +9,24 @@ st.title("出席管理")
 
 sb = get_client()
 
-# --- イベント選択（メインコンテンツ：サイドバー非表示でも使えるように） ---
+# --- URLパラメータ取得 ---
+param_event_id = st.query_params.get("event_id")
+
+# --- イベント選択（URLパラメータ優先、なければセレクトボックス） ---
 events = get_events()
 if not events:
     st.warning("イベントがありません。先に「イベント管理」でイベントを作成してください。")
     st.stop()
 
-selected_event = event_selectbox(events, key="checkin_event")
-if selected_event is None:
-    st.info("イベントを選択してください")
-    st.stop()
+event_id_to_event = {e["id"]: e for e in events}
+
+if param_event_id and param_event_id in event_id_to_event:
+    selected_event = event_id_to_event[param_event_id]
+else:
+    selected_event = event_selectbox(events, key="checkin_event")
+    if selected_event is None:
+        st.info("イベントを選択してください")
+        st.stop()
 
 event_title = f"{selected_event['category']} {selected_event['label'] or ''} {selected_event['event_date'] or ''}".strip()
 
