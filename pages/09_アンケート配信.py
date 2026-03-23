@@ -36,6 +36,8 @@ members = [m for m in get_members(active_only=False) if m.get("management_status
 st.subheader(f"送付先リスト（在籍 {len(members)}名）")
 st.caption("送付する会員にチェックを入れてください。デフォルトは全員選択です。")
 
+search_member = st.text_input("名前で絞り込み", placeholder="名前の一部を入力…", label_visibility="collapsed")
+
 col_check, col_all, col_none = st.columns([6, 1, 1])
 with col_all:
     if st.button("全選択"):
@@ -67,7 +69,8 @@ cols[1].markdown("**氏名**")
 cols[2].markdown("**回答状況**")
 cols[3].markdown("**Chatwork**")
 
-for m in members:
+displayed_members = [m for m in members if search_member.lower() in m["display_name"].lower()] if search_member else members
+for m in displayed_members:
     uid = m["id"]
     cols = st.columns([0.5, 3, 2, 2])
     checked = cols[0].checkbox("", key=f"send_{uid}", label_visibility="collapsed")

@@ -116,20 +116,33 @@ absent_count  = sum(1 for m in members if log_by_uid.get(m["id"], {}).get("statu
 st.markdown(f"**確定済み：出席 {attend_count}名 ／ 欠席 {absent_count}名**")
 st.divider()
 
+# --- 名前フィルター ---
+search = st.text_input("名前で絞り込み", placeholder="名前の一部を入力…", label_visibility="collapsed")
+
+def filter_by_name(lst, query):
+    if not query:
+        return lst
+    q = query.lower()
+    return [m for m in lst if q in m["display_name"].lower()]
+
+attending_view   = filter_by_name(attending,   search)
+absent_view      = filter_by_name(absent,      search)
+no_response_view = filter_by_name(no_response, search)
+
 # --- 参加予定 ---
-if attending:
-    st.markdown(f"**── 参加予定（{len(attending)}名）──**")
-    for m in attending:
+if attending_view:
+    st.markdown(f"**── 参加予定（{len(attending_view)}名）──**")
+    for m in attending_view:
         render_member_row(m, 3)
 
 # --- 欠席予定 ---
-if absent:
-    st.markdown(f"**── 欠席予定（{len(absent)}名）──**")
-    for m in absent:
+if absent_view:
+    st.markdown(f"**── 欠席予定（{len(absent_view)}名）──**")
+    for m in absent_view:
         render_member_row(m, 4)
 
-# --- 未回答（デフォルト折りたたみ） ---
-if no_response:
-    with st.expander(f"未回答（{len(no_response)}名）", expanded=False):
-        for m in no_response:
+# --- 未回答（デフォルト折りたたみ・検索時は自動展開） ---
+if no_response_view:
+    with st.expander(f"未回答（{len(no_response_view)}名）", expanded=bool(search)):
+        for m in no_response_view:
             render_member_row(m, None)
