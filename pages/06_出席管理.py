@@ -9,21 +9,18 @@ st.title("出席管理")
 
 sb = get_client()
 
-# --- イベント選択（サイドバー） ---
-with st.sidebar:
-    st.header("イベント選択")
-    events = get_events()
-    if not events:
-        st.warning("イベントがありません。先に「イベント管理」でイベントを作成してください。")
-        st.stop()
+# --- イベント選択（メインコンテンツ：サイドバー非表示でも使えるように） ---
+events = get_events()
+if not events:
+    st.warning("イベントがありません。先に「イベント管理」でイベントを作成してください。")
+    st.stop()
 
-    selected_event = event_selectbox(events, key="sidebar_event")
-    if selected_event is None:
-        st.info("イベントを選択してください")
-        st.stop()
+selected_event = event_selectbox(events, key="checkin_event")
+if selected_event is None:
+    st.info("イベントを選択してください")
+    st.stop()
 
-    event_title = f"{selected_event['category']} {selected_event['label'] or ''} {selected_event['event_date'] or ''}".strip()
-    st.success(f"選択中: {event_title}")
+event_title = f"{selected_event['category']} {selected_event['label'] or ''} {selected_event['event_date'] or ''}".strip()
 
 # --- 担当者名 ---
 st.subheader(f"{event_title} — チェックイン（当日）")
@@ -35,7 +32,6 @@ if not checker_name:
 st.divider()
 
 # --- データ取得 ---
-
 members = get_members(active_only=True)
 all_logs = (
     sb.table("event_logs")
@@ -51,6 +47,7 @@ attending   = [m for m in members if log_by_uid.get(m["id"], {}).get("status") i
 absent      = [m for m in members if log_by_uid.get(m["id"], {}).get("status") in (4, 2)]
 no_response = [m for m in members if m["id"] not in log_by_uid]
 
+
 def do_checkin(member, status_code):
     upsert_event_log(
         event_id=selected_event["id"],
@@ -63,50 +60,51 @@ def do_checkin(member, status_code):
     )
     st.rerun()
 
+
 def render_member_row(m, default_status_code):
+    """スマホ対応レイアウト: 名前→ボタン2列"""
     uid = m["id"]
     log = log_by_uid.get(uid, {})
     current_status = log.get("status", 0)
     note = log.get("note") or ""
-    by = log.get("checked_in_by") or ""
+    by   = log.get("checked_in_by") or ""
 
-    col_name, col_btn1, col_btn2, col_note = st.columns([3, 2, 2, 3])
+    # 名前 + 備考
+    note_text = f"　📝 {note}" if note else ""
+    by_text   = f"　（{by}）" if by else ""
+    st.markdown(f"**{m['display_name']}**{by_text}{note_text}")
 
-    with col_name:
-        st.markdown(f"{m['display_name']}")
+    # ボタン（2等分で押しやすく）
+    col1, col2 = st.columns(2)
 
     if current_status == 1:
-        with col_btn1:
-            st.markdown("✅ **出席確定**")
-        with col_btn2:
-            if st.button("取消", key=f"undo_{uid}", type="secondary"):
-                do_checkin(m, 3)  # 参加予定に戻す
-        with col_note:
-            st.caption(f"{by}" + (f"　📝 {note}" if note else ""))
+        with col1:
+            st.success("✅ 出席確定")
+        with col2:
+            if st.button("取消", key=f"undo_{uid}", use_container_width=True):
+                do_checkin(m, 3)   # 参加予定に戻す
 
     elif current_status == 2:
-        with col_btn1:
-            st.markdown("❌ **欠席確定**")
-        with col_btn2:
-            if st.button("取消", key=f"undo_{uid}", type="secondary"):
-                do_checkin(m, 4)  # 欠席予定に戻す
-        with col_note:
-            st.caption(f"{by}" + (f"　📝 {note}" if note else ""))
+        with col1:
+            st.error("❌ 欠席確定")
+        with col2:
+            if st.button("取消", key=f"undo_{uid}", use_container_width=True):
+                do_checkin(m, 4)   # 欠席予定に戻す
 
     else:
-        with col_btn1:
-            if st.button("✅ 出席", key=f"in_{uid}", type="primary"):
+        with col1:
+            if st.button("✅ 出席", key=f"in_{uid}", type="primary", use_container_width=True):
                 do_checkin(m, 1)
-        with col_btn2:
-            if st.button("❌ 欠席", key=f"out_{uid}"):
+        with col2:
+            if st.button("❌ 欠席", key=f"out_{uid}", use_container_width=True):
                 do_checkin(m, 2)
-        with col_note:
-            if note:
-                st.markdown(f"📝 {note}")
 
-# --- 確定済みサマリー（リストの上に表示） ---
+    st.divider()
+
+
+# --- 確定済みサマリー ---
 attend_count = sum(1 for m in members if log_by_uid.get(m["id"], {}).get("status") == 1)
-absent_count = sum(1 for m in members if log_by_uid.get(m["id"], {}).get("status") == 2)
+absent_count  = sum(1 for m in members if log_by_uid.get(m["id"], {}).get("status") == 2)
 st.markdown(f"**確定済み：出席 {attend_count}名 ／ 欠席 {absent_count}名**")
 st.divider()
 
@@ -115,14 +113,12 @@ if attending:
     st.markdown(f"**── 参加予定（{len(attending)}名）──**")
     for m in attending:
         render_member_row(m, 3)
-    st.divider()
 
 # --- 欠席予定 ---
 if absent:
     st.markdown(f"**── 欠席予定（{len(absent)}名）──**")
     for m in absent:
         render_member_row(m, 4)
-    st.divider()
 
 # --- 未回答（デフォルト折りたたみ） ---
 if no_response:

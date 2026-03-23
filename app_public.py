@@ -30,7 +30,7 @@ st.markdown(
 )
 
 pg = st.navigation([
-    st.Page("pages/08_アンケート.py", title="出欠アンケート — 回答フォーム"),
-    st.Page("pages/06_出席管理.py",   title="出席管理 — チェックイン"),
+    st.Page("pages/08_アンケート.py", title="出欠アンケート — 回答フォーム", url_path="survey"),
+    st.Page("pages/06_出席管理.py",   title="出席管理 — チェックイン",       url_path="checkin"),
 ])
 pg.run()
