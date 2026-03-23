@@ -3,6 +3,7 @@ from collections import Counter, defaultdict
 import pandas as pd
 from utils.supabase_client import get_client, get_events, get_members
 from utils.ui_helpers import event_selectbox
+from utils.constants import ST_ATTENDED, ST_ABSENT, ST_PLAN_IN, ST_PLAN_OUT, MS_ACTIVE, STATUS_LABELS
 
 # ── データ取得 ──────────────────────────────────────────────
 def _fetch_all_event_logs():
@@ -31,7 +32,7 @@ def load_summary_data():
     events = get_events()
     logs   = _fetch_all_event_logs()
     members = get_members(active_only=False)
-    active_count = sum(1 for m in members if m["management_status"] == 1)
+    active_count = sum(1 for m in members if m["management_status"] == MS_ACTIVE)
     return events, logs, active_count
 
 @st.cache_data(ttl=30)
@@ -74,10 +75,10 @@ with tab1:
             continue
         eid = e["id"]
         c = counts.get(eid, Counter())
-        attend  = c.get(1, 0)
-        absent  = c.get(2, 0)
-        plan_in = c.get(3, 0)
-        plan_out= c.get(4, 0)
+        attend  = c.get(ST_ATTENDED, 0)
+        absent  = c.get(ST_ABSENT, 0)
+        plan_in = c.get(ST_PLAN_IN, 0)
+        plan_out= c.get(ST_PLAN_OUT, 0)
         no_ans  = max(active_count - attend - absent - plan_in - plan_out, 0)
         rate    = f"{attend / active_count * 100:.1f}%" if active_count else "—"
         rows.append({
@@ -110,15 +111,13 @@ with tab2:
 
         # 在籍者全員（未回答検出用）
         all_members = get_members(active_only=False)
-        active_members = {m["id"]: m["display_name"] for m in all_members if m["management_status"] == 1}
+        active_members = {m["id"]: m["display_name"] for m in all_members if m["management_status"] == MS_ACTIVE}
 
         logged_ids = {row["user_id"] for row in logs2}
         no_response_ids = set(active_members.keys()) - logged_ids
 
-        attending  = [r for r in logs2 if r["status"] in (1, 3)]
-        absent     = [r for r in logs2 if r["status"] in (2, 4)]
-
-        STATUS_JP = {1: "出席", 2: "欠席", 3: "参加予定", 4: "欠席予定"}
+        attending  = [r for r in logs2 if r["status"] in (ST_ATTENDED, ST_PLAN_IN)]
+        absent     = [r for r in logs2 if r["status"] in (ST_ABSENT, ST_PLAN_OUT)]
 
         def show_group(title: str, items, use_name_key=True):
             st.markdown(f"**{title}（{len(items)}名）**")
@@ -126,7 +125,7 @@ with tab2:
                 st.caption("なし")
             elif use_name_key:
                 for r in sorted(items, key=lambda x: x.get("name", "")):
-                    st.write(f"・{r.get('name', '—')}　{STATUS_JP.get(r['status'], '')}")
+                    st.write(f"・{r.get('name', '—')}　{STATUS_LABELS.get(r['status'], '')}")
             else:
                 for name in sorted(items):
                     st.write(f"・{name}")

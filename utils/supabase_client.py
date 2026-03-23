@@ -1,5 +1,6 @@
 from supabase import create_client, Client
 from utils.secrets import get_secret
+from utils.constants import MS_ACTIVE, MS_PAUSED
 
 _client: Client | None = None
 
@@ -18,7 +19,7 @@ def get_members(active_only: bool = False) -> list[dict]:
     sb = get_client()
     q = sb.table("users_master").select("*")
     if active_only:
-        q = q.in_("management_status", [1, 2])
+        q = q.in_("management_status", [MS_ACTIVE, MS_PAUSED])
     users = q.execute().data
     mappings = {m["user_id"]: m for m in sb.table("name_mappings").select("user_id, clean_name").execute().data}
     for u in users:

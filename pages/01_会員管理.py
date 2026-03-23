@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import date, datetime
 from utils.supabase_client import get_client, get_members, get_m_status, insert_record
 from utils.chatwork import find_account_id, get_dm_room_id, send_message
+from utils.constants import ACTIVITY_TYPES, MS_LEFT, DATE_FMT_YM
 
 st.title("会員管理")
 
@@ -16,7 +17,6 @@ status_list = get_m_status("management_status")
 status_options = {s["label"]: s["code"] for s in status_list}
 status_labels = {s["code"]: s["label"] for s in status_list}
 
-ACTIVITY_TYPES = ["プロデューサー", "コンテンツホルダー", "両方", "未定"]
 DEFAULT_TEMPLATE = "こんにちは。"
 
 # session_state 初期化
@@ -79,11 +79,11 @@ if mode == "新規追加" or selected:
             placeholder="本名を入力してください",
         )
         try:
-            _ja_default = datetime.strptime(selected.get("joined_at") or "", "%Y/%m").date() if selected else date.today()
+            _ja_default = datetime.strptime(selected.get("joined_at") or "", DATE_FMT_YM).date() if selected else date.today()
         except ValueError:
             _ja_default = date.today()
         _ja_date = st.date_input("入会月", value=_ja_default)
-        joined_at = _ja_date.strftime("%Y/%m")
+        joined_at = _ja_date.strftime(DATE_FMT_YM)
         left_at = st.text_input(
             "在籍有効期限（YYYY/MM）",
             value=selected.get("left_at") or "" if selected else "",
@@ -139,7 +139,7 @@ if mode == "新規追加" or selected:
             list(status_options.keys()),
             index=list(status_options.keys()).index(current_label) if current_label in status_options else 1,
         )
-        is_taikain = (status_options.get(status_label) == 9)
+        is_taikain = (status_options.get(status_label) == MS_LEFT)
 
         if mode == "既存会員を編集" and is_taikain:
             left_year = st.text_input(

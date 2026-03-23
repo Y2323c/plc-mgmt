@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import date, datetime
 from utils.supabase_client import get_client, get_next_term_count, insert_record
 from utils.ui_helpers import member_selectbox
+from utils.constants import DATE_FMT_YMD
 
 st.title("コーチングチケット")
 
@@ -64,20 +65,20 @@ with st.form("ticket_form"):
         )
         coach_name = st.text_input("コーチ名", value=selected_ticket["coach_name"] or "" if selected_ticket else "")
         try:
-            _sd_default = datetime.strptime(selected_ticket["start_date"] or "", "%Y/%m/%d").date() if selected_ticket and selected_ticket.get("start_date") else date.today()
+            _sd_default = datetime.strptime(selected_ticket["start_date"] or "", DATE_FMT_YMD).date() if selected_ticket and selected_ticket.get("start_date") else date.today()
         except ValueError:
             _sd_default = date.today()
         _sd_date = st.date_input("開始日", value=_sd_default)
-        start_date = _sd_date.strftime("%Y/%m/%d")
+        start_date = _sd_date.strftime(DATE_FMT_YMD)
     with col2:
         max_sessions = st.number_input("最大セッション数", min_value=0, value=int(selected_ticket["max_sessions"] or 0) if selected_ticket else 0)
         duration_months = st.number_input("期間（月）", min_value=0, value=int(selected_ticket["duration_months"] or 0) if selected_ticket else 0)
         try:
-            _ea_default = datetime.strptime(selected_ticket["expired_at"] or "", "%Y/%m/%d").date() if selected_ticket and selected_ticket.get("expired_at") else date.today()
+            _ea_default = datetime.strptime(selected_ticket["expired_at"] or "", DATE_FMT_YMD).date() if selected_ticket and selected_ticket.get("expired_at") else date.today()
         except ValueError:
             _ea_default = date.today()
         _ea_date = st.date_input("有効期限", value=_ea_default)
-        expired_at = _ea_date.strftime("%Y/%m/%d")
+        expired_at = _ea_date.strftime(DATE_FMT_YMD)
         is_active = st.checkbox("有効（is_active）", value=bool(selected_ticket["is_active"]) if selected_ticket else True)
 
     submitted = st.form_submit_button("保存")

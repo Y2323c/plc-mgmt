@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import date
 from utils.supabase_client import get_client, insert_record
 from utils.ui_helpers import member_selectbox
-from utils.constants import CONSULT_TYPES
+from utils.constants import CONSULT_TYPES, CAT_CONSULT, ST_ATTENDED
 
 st.title("コンサル記録")
 
@@ -26,7 +26,7 @@ logs = (
     sb.table("event_logs")
     .select("*")
     .eq("user_id", selected_member["id"])
-    .eq("category", "コンサル")
+    .eq("category", CAT_CONSULT)
     .execute()
     .data
 )
@@ -59,10 +59,10 @@ with st.form("consult_form"):
 if submitted:
     insert_record("event_logs", {
         "user_id": selected_member["id"],
-        "category": "コンサル",
+        "category": CAT_CONSULT,
         "title": None,
         "name": selected_member["display_name"],
-        "status": 1,
+        "status": ST_ATTENDED,
         "consult_type": consult_type,
         "consult_date": consult_date.isoformat(),
         "event_id": None,

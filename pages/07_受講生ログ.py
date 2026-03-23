@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import streamlit as st
 from utils.supabase_client import get_client, get_m_status
 from utils.ui_helpers import member_selectbox, show_dataframe
+from utils.constants import CAT_WS, CAT_TEAM, CAT_CONSULT
 
 st.title("受講生ログ")
 
@@ -47,7 +48,7 @@ with tab_event:
         sb.table("event_logs")
         .select("*, events(category, event_date, label)")
         .eq("user_id", uid)
-        .in_("category", ["WS", "チーム"])
+        .in_("category", [CAT_WS, CAT_TEAM])
         .execute()
         .data
     )
@@ -77,7 +78,7 @@ with tab_consult:
         sb.table("event_logs")
         .select("*")
         .eq("user_id", uid)
-        .eq("category", "コンサル")
+        .eq("category", CAT_CONSULT)
         .execute()
         .data
     )

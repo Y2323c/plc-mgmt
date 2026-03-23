@@ -10,13 +10,15 @@ load_dotenv()
 
 
 def get_secret(key: str) -> str:
-    # Streamlit Cloud の secrets を優先
+    """
+    Streamlit Cloud の st.secrets を優先し、なければ環境変数から取得する。
+    どちらにもない場合は空文字を返す。
+    """
     try:
         import streamlit as st
         val = st.secrets.get(key)
         if val:
-            return val
-    except Exception:
+            return str(val)
+    except (ImportError, AttributeError, KeyError):
         pass
-    # ローカルの環境変数にフォールバック
     return os.environ.get(key, "")

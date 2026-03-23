@@ -1,8 +1,7 @@
 """Chatwork API ユーティリティ"""
 import requests
 from utils.secrets import get_secret
-
-_BASE = "https://api.chatwork.com/v2"
+from utils.constants import CHATWORK_API_BASE, CHATWORK_TIMEOUT
 
 
 def _headers() -> dict:
@@ -12,15 +11,30 @@ def _headers() -> dict:
     return {"X-ChatWorkToken": token}
 
 
+def _get(path: str) -> requests.Response:
+    """共通 GET リクエスト"""
+    res = requests.get(f"{CHATWORK_API_BASE}{path}", headers=_headers(), timeout=CHATWORK_TIMEOUT)
+    res.raise_for_status()
+    return res
+
+
+def _post(path: str, data: dict) -> requests.Response:
+    """共通 POST リクエスト"""
+    return requests.post(
+        f"{CHATWORK_API_BASE}{path}",
+        headers=_headers(),
+        data=data,
+        timeout=CHATWORK_TIMEOUT,
+    )
+
+
 def find_account_id(chatwork_id: str) -> dict | None:
     """
     Chatwork ハンドル名 (chatwork_id) からアカウント情報を返す。
     見つからない場合は None。
-    戻り値: {"account_id": "123456", "name": "山田太郎"} など
+    戻り値: {"account_id": "123456", "name": "山田太郎", "avatar_image_url": "..."}
     """
-    res = requests.get(f"{_BASE}/contacts", headers=_headers(), timeout=10)
-    res.raise_for_status()
-    contacts = res.json()
+    contacts = _get("/contacts").json()
     for c in contacts:
         if c.get("chatwork_id", "").lower() == chatwork_id.strip().lower():
             return {
@@ -36,20 +50,14 @@ def get_dm_room_id(account_id: str) -> str | None:
     指定アカウントとの 1対1 DM ルームIDを返す。
     見つからない場合は None。
     """
-    res = requests.get(f"{_BASE}/rooms", headers=_headers(), timeout=10)
-    res.raise_for_status()
-    for room in res.json():
-        if room.get("type") == "direct":
-            # DM ルームのメンバーを確認
-            members_res = requests.get(
-                f"{_BASE}/rooms/{room['room_id']}/members",
-                headers=_headers(),
-                timeout=10,
-            )
-            if members_res.ok:
-                member_ids = [str(m["account_id"]) for m in members_res.json()]
-                if account_id in member_ids:
-                    return str(room["room_id"])
+    rooms = _get("/rooms").json()
+    for room in rooms:
+        if room.get("type") != "direct":
+            continue
+        members_res = _get(f"/rooms/{room['room_id']}/members")
+        member_ids = [str(m["account_id"]) for m in members_res.json()]
+        if account_id in member_ids:
+            return str(room["room_id"])
     return None
 
 
@@ -58,20 +66,13 @@ def get_all_dm_room_ids() -> dict[str, str]:
     全 DM ルームを取得し {account_id: room_id} の辞書を返す。
     一斉送信時に1度だけ呼び出してキャッシュすることで API 呼び出しを最小化する。
     """
-    res = requests.get(f"{_BASE}/rooms", headers=_headers(), timeout=10)
-    res.raise_for_status()
+    rooms = _get("/rooms").json()
     dm_map: dict[str, str] = {}
-    for room in res.json():
+    for room in rooms:
         if room.get("type") != "direct":
             continue
         room_id = str(room["room_id"])
-        members_res = requests.get(
-            f"{_BASE}/rooms/{room_id}/members",
-            headers=_headers(),
-            timeout=10,
-        )
-        if not members_res.ok:
-            continue
+        members_res = _get(f"/rooms/{room_id}/members")
         for m in members_res.json():
             aid = str(m["account_id"])
             if aid not in dm_map:
@@ -84,10 +85,5 @@ def send_message(room_id: str, message: str) -> bool:
     指定ルームにメッセージを送信する。
     成功で True、失敗で False。
     """
-    res = requests.post(
-        f"{_BASE}/rooms/{room_id}/messages",
-        headers=_headers(),
-        data={"body": message},
-        timeout=10,
-    )
+    res = _post(f"/rooms/{room_id}/messages", {"body": message})
     return res.ok

@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import streamlit as st
 from utils.supabase_client import get_client, get_members, get_events, upsert_event_log
 from utils.ui_helpers import event_selectbox
+from utils.constants import ST_ATTENDED, ST_ABSENT, ST_PLAN_IN, ST_PLAN_OUT
 
 st.title("出席管理")
 
@@ -51,8 +52,8 @@ all_logs = (
 log_by_uid = {r["user_id"]: r for r in all_logs}
 
 # 会員を分類（チェックイン済みも元のセクションに残す）
-attending   = [m for m in members if log_by_uid.get(m["id"], {}).get("status") in (3, 1)]
-absent      = [m for m in members if log_by_uid.get(m["id"], {}).get("status") in (4, 2)]
+attending   = [m for m in members if log_by_uid.get(m["id"], {}).get("status") in (ST_PLAN_IN, ST_ATTENDED)]
+absent      = [m for m in members if log_by_uid.get(m["id"], {}).get("status") in (ST_PLAN_OUT, ST_ABSENT)]
 no_response = [m for m in members if m["id"] not in log_by_uid]
 
 
@@ -85,34 +86,34 @@ def render_member_row(m, default_status_code):
     # ボタン（2等分で押しやすく）
     col1, col2 = st.columns(2)
 
-    if current_status == 1:
+    if current_status == ST_ATTENDED:
         with col1:
             st.success("✅ 出席確定")
         with col2:
             if st.button("取消", key=f"undo_{uid}", use_container_width=True):
-                do_checkin(m, 3)   # 参加予定に戻す
+                do_checkin(m, ST_PLAN_IN)   # 参加予定に戻す
 
-    elif current_status == 2:
+    elif current_status == ST_ABSENT:
         with col1:
             st.error("❌ 欠席確定")
         with col2:
             if st.button("取消", key=f"undo_{uid}", use_container_width=True):
-                do_checkin(m, 4)   # 欠席予定に戻す
+                do_checkin(m, ST_PLAN_OUT)   # 欠席予定に戻す
 
     else:
         with col1:
             if st.button("✅ 出席", key=f"in_{uid}", type="primary", use_container_width=True):
-                do_checkin(m, 1)
+                do_checkin(m, ST_ATTENDED)
         with col2:
             if st.button("❌ 欠席", key=f"out_{uid}", use_container_width=True):
-                do_checkin(m, 2)
+                do_checkin(m, ST_ABSENT)
 
     st.divider()
 
 
 # --- 確定済みサマリー ---
-attend_count = sum(1 for m in members if log_by_uid.get(m["id"], {}).get("status") == 1)
-absent_count  = sum(1 for m in members if log_by_uid.get(m["id"], {}).get("status") == 2)
+attend_count = sum(1 for m in members if log_by_uid.get(m["id"], {}).get("status") == ST_ATTENDED)
+absent_count  = sum(1 for m in members if log_by_uid.get(m["id"], {}).get("status") == ST_ABSENT)
 st.markdown(f"**確定済み：出席 {attend_count}名 ／ 欠席 {absent_count}名**")
 st.divider()
 

@@ -5,7 +5,7 @@ import streamlit as st
 import pandas as pd
 from utils.supabase_client import get_client, get_members, get_events
 from utils.ui_helpers import event_selectbox
-from utils.constants import STATUS_LABELS
+from utils.constants import STATUS_LABELS, PUBLIC_APP_BASE_URL
 from utils.chatwork import get_all_dm_room_ids, send_message
 
 st.title("出欠アンケート配信")
@@ -92,7 +92,7 @@ st.subheader("配信設定")
 
 base_url = st.text_input(
     "公開アプリのベースURL",
-    value="https://plc-mgmt-zndsegnd3csnyf48tnmzfb.streamlit.app",
+    value=PUBLIC_APP_BASE_URL,
 )
 
 # チェックインURL（当日担当者に共有）
