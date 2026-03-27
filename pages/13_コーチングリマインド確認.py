@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import re
 import streamlit as st
 import pandas as pd
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from utils.supabase_client import get_client
 from utils.chatwork import send_message
@@ -58,7 +58,6 @@ def _status_label(elapsed: int, reminder_day: int, session_done: bool) -> str:
 
 
 def _sort_key(label: str) -> int:
-    """ソート用: 超過 → 今日 → 近い順 → 消化済み"""
     if "超過" in label:
         n = int(label.replace("⚠️ ", "").split("日")[0])
         return -n
@@ -94,7 +93,7 @@ st.title("コーチングリマインド確認")
 sb    = get_client()
 today = date.today()
 
-# ── 自動送信ステータス ────────────────────────────────────────────────────
+# ── 全体キャンセル UI ─────────────────────────────────────────────────────
 skip_data = (
     sb.table("reminder_skip_dates")
     .select("skip_date")
@@ -111,8 +110,9 @@ with st.container(border=True):
             sb.table("reminder_skip_dates").delete().eq("skip_date", str(today)).execute()
             st.rerun()
     else:
-        st.info(f"▶️ 今日（{today.strftime('%Y/%m/%d')}）の自動送信：予定あり（9:00）")
-        if st.button("今日の自動送信をキャンセル"):
+        col_s1, col_s2 = st.columns([3, 1])
+        col_s1.info(f"▶️ 今日（{today.strftime('%Y/%m/%d')}）の自動送信：予定あり（18:00）")
+        if col_s2.button("全キャンセル", use_container_width=True):
             sb.table("reminder_skip_dates").insert({"skip_date": str(today)}).execute()
             st.rerun()
 
@@ -133,7 +133,7 @@ with col_f1:
 with col_f2:
     status_filter = st.selectbox(
         "ステータスで絞り込み",
-        ["すべて", "要対応のみ（超過・今日）", "未消化のみ", "消化済みを除く"],
+        ["すべて", "明日の送信予定", "要対応のみ（超過・今日）", "未消化のみ", "消化済みを除く"],
     )
 
 # 有効チケット取得
@@ -154,7 +154,7 @@ if user_ids:
     )
     user_cache = {u["id"]: u.get("joined_at") for u in users}
 
-# チケットIDリスト → セッションログを一括取得
+# セッションログを一括取得
 ticket_ids = [t["id"] for t in tickets]
 all_logs = []
 if ticket_ids:
@@ -171,7 +171,7 @@ for log in all_logs:
     if sc is not None:
         done_map.setdefault(tid, set()).add(sc)
 
-# ── テーブル構築 ─────────────────────────────────────────────────────────
+# ── テーブル構築（pass 1）────────────────────────────────────────────────
 rows = []
 for ticket in tickets:
     coaching_type = ticket.get("coaching_type", "")
@@ -205,22 +205,28 @@ for ticket in tickets:
 
         if elapsed is not None:
             status = _status_label(elapsed, reminder_day, session_done)
-            remind_date = (ref_date + pd.Timedelta(days=reminder_day)).strftime("%Y/%m/%d")
+            remind_date_obj = ref_date + timedelta(days=reminder_day)
+            remind_date     = remind_date_obj.strftime("%Y/%m/%d")
         else:
-            status = "⚠️ 基準日不明"
-            remind_date = "—"
+            status          = "⚠️ 基準日不明"
+            remind_date     = "—"
+            remind_date_obj = None
 
         rows.append({
-            "_sort":        _sort_key(status) if elapsed is not None else 9998,
-            "_months":      months,
-            "名前":         member_name,
-            "コーチ":       coach_name,
-            "種別":         coaching_type,
-            "基準日":       ref_display,
-            "経過日数":     elapsed if elapsed is not None else "—",
-            "対象回":       f"{session_num}回目",
-            "リマインド日": remind_date,
-            "状況":         status,
+            "_sort":            _sort_key(status) if elapsed is not None else 9998,
+            "_months":          months,
+            "_ticket_id":       ticket_id,
+            "_session_num":     session_num,
+            "_remind_date_raw": remind_date_obj,
+            "スキップ":         False,   # pass 2 で上書き
+            "名前":             member_name,
+            "コーチ":           coach_name,
+            "種別":             coaching_type,
+            "基準日":           ref_display,
+            "経過日数":         elapsed if elapsed is not None else "—",
+            "対象回":           f"{session_num}回目",
+            "リマインド日":     remind_date,
+            "状況":             status,
         })
 
 # ステータスフィルター
@@ -228,6 +234,8 @@ def _apply_status_filter(row: dict) -> bool:
     s = row["状況"]
     if status_filter == "すべて":
         return True
+    if status_filter == "明日の送信予定":
+        return s == "📅 あと1日"
     if status_filter == "要対応のみ（超過・今日）":
         return "超過" in s or "今日" in s
     if status_filter == "未消化のみ":
@@ -239,51 +247,90 @@ def _apply_status_filter(row: dict) -> bool:
 rows = [r for r in rows if _apply_status_filter(r)]
 rows.sort(key=lambda r: r["_sort"])
 
+# ── スキップ状態を DB からロード（pass 2）────────────────────────────────
+remind_dates = list({
+    str(r["_remind_date_raw"]) for r in rows if r["_remind_date_raw"] is not None
+})
+if remind_dates:
+    skip_targets = (
+        sb.table("reminder_skip_targets")
+        .select("skip_date,ticket_id,session_num")
+        .in_("skip_date", remind_dates)
+        .execute().data
+    )
+    skip_set = {(r["skip_date"], r["ticket_id"], r["session_num"]) for r in skip_targets}
+    for r in rows:
+        if r["_remind_date_raw"] is not None:
+            r["スキップ"] = (str(r["_remind_date_raw"]), r["_ticket_id"], r["_session_num"]) in skip_set
+
 # ── 表示 ─────────────────────────────────────────────────────────────────
 st.caption(f"基準日: 本日 {today.strftime('%Y/%m/%d')} / 対象チケット数: {len(tickets)}")
 
 if not rows:
     st.info("表示対象のリマインドはありません。")
 else:
-    display_cols = ["名前", "コーチ", "種別", "基準日", "経過日数", "対象回", "リマインド日", "状況"]
+    display_cols = ["スキップ", "名前", "コーチ", "種別", "基準日", "経過日数", "対象回", "リマインド日", "状況"]
     df = pd.DataFrame([{k: r[k] for k in display_cols} for r in rows])
 
-    event = st.dataframe(
+    edited_df = st.data_editor(
         df,
-        use_container_width=True,
+        column_config={
+            "スキップ": st.column_config.CheckboxColumn("スキップ", default=False),
+        },
+        disabled=[col for col in display_cols if col != "スキップ"],
         hide_index=True,
-        selection_mode="multi-row",
-        on_select="rerun",
+        use_container_width=True,
         key="reminder_table",
     )
-    selected_idx = event.selection.rows
 
-    # 選択送信 UI
-    if selected_idx:
-        st.caption(f"{len(selected_idx)} 件選択中")
-        if st.button(f"選択した {len(selected_idx)} 件に送信"):
+    col_b1, col_b2 = st.columns([1, 2])
+
+    # スキップ保存ボタン
+    if col_b1.button("スキップを保存", use_container_width=True):
+        changed = 0
+        for i, row in enumerate(rows):
+            old_skip = row["スキップ"]
+            new_skip = bool(edited_df.iloc[i]["スキップ"])
+            if old_skip == new_skip or row["_remind_date_raw"] is None:
+                continue
+            skip_key = {
+                "skip_date":   str(row["_remind_date_raw"]),
+                "ticket_id":   row["_ticket_id"],
+                "session_num": row["_session_num"],
+            }
+            if new_skip:
+                sb.table("reminder_skip_targets").upsert(skip_key).execute()
+            else:
+                (sb.table("reminder_skip_targets").delete()
+                 .eq("skip_date",   skip_key["skip_date"])
+                 .eq("ticket_id",   skip_key["ticket_id"])
+                 .eq("session_num", skip_key["session_num"])
+                 .execute())
+            changed += 1
+        if changed:
+            st.success(f"スキップ設定を保存しました（{changed}件）")
+            st.rerun()
+        else:
+            st.info("変更はありませんでした")
+
+    # 今すぐ手動送信ボタン
+    sendable = [r for r in rows if not r["スキップ"] and ("今日" in r["状況"] or "超過" in r["状況"])]
+    if sendable:
+        label = f"今すぐ手動送信（スキップなし・{len(sendable)}件）"
+        if col_b2.button(label, use_container_width=True):
             token = get_secret("CHATWORK_COACHING_API_TOKEN")
             results = []
-            for i in selected_idx:
-                r           = rows[i]
-                coach_name  = r["コーチ"]
-                member_name = r["名前"]
-                coaching_type = r["種別"]
-                session_num = int(r["対象回"].replace("回目", ""))
-                months      = r["_months"]
-                room_id     = coach_rooms.get(coach_name)
+            for r in sendable:
+                room_id = coach_rooms.get(r["コーチ"])
                 if not room_id:
-                    results.append(f"❌ {member_name}（{coach_name}：room_id 未設定）")
+                    results.append(f"❌ {r['名前']}（{r['コーチ']}：room_id 未設定）")
                     continue
-                msg = _build_message(coaching_type, months, session_num, member_name, coach_name)
+                msg = _build_message(r["種別"], r["_months"], r["_session_num"],
+                                     r["名前"], r["コーチ"])
                 ok  = send_message(str(room_id), msg, token=token or None)
-                results.append(
-                    f"{'✅' if ok else '❌'} {member_name}（{coach_name}）{session_num}回目"
-                )
+                results.append(f"{'✅' if ok else '❌'} {r['名前']}（{r['コーチ']}）{r['_session_num']}回目")
             for line in results:
                 st.write(line)
-    else:
-        st.caption("行を選択すると「選択した件数に送信」ボタンが表示されます")
 
     # サマリー
     st.divider()
@@ -291,9 +338,11 @@ else:
     today_cnt = sum(1 for r in rows if "今日" in r["状況"])
     upcoming  = sum(1 for r in rows if "あと" in r["状況"])
     done      = sum(1 for r in rows if "消化済み" in r["状況"])
+    skipped   = sum(1 for r in rows if r["スキップ"])
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("⚠️ 超過・未消化", overdue)
     c2.metric("🔔 今日送信",     today_cnt)
     c3.metric("📅 予定あり",     upcoming)
     c4.metric("✅ 消化済み",     done)
+    c5.metric("📵 スキップ",     skipped)

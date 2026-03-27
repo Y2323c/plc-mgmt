@@ -232,6 +232,16 @@ def run():
     )
     print(f"  対象チケット数: {len(tickets)}")
 
+    # 人別スキップターゲットを取得
+    skip_targets_data = (
+        sb.table("reminder_skip_targets")
+        .select("ticket_id,session_num")
+        .eq("skip_date", str(today))
+        .execute()
+        .data
+    )
+    skip_target_set = {(r["ticket_id"], r["session_num"]) for r in skip_targets_data}
+
     # user_id → joined_at のキャッシュ（新規コーチング用）
     user_cache: dict[str, str | None] = {}
 
@@ -289,6 +299,10 @@ def run():
             session_num = reminder["session"]
             if session_num in done_sessions:
                 print(f"  ✓ {member_name}: {session_num}回目は消化済み。スキップ。")
+                continue
+
+            if (ticket_id, session_num) in skip_target_set:
+                print(f"  ✓ {member_name}: {session_num}回目はスキップ対象。送信しません。")
                 continue
 
             room_id = coach_rooms.get(coach_name)
