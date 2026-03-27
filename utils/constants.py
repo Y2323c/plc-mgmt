@@ -62,3 +62,6 @@ CHATWORK_TIMEOUT  = 10  # 秒
 
 # ── 公開アプリ ──
 PUBLIC_APP_BASE_URL = "https://plc-mgmt-zndsegnd3csnyf48tnmzfb.streamlit.app"
+
+# ── コーチング完了通知先（Chatwork グループ room_id）──
+COACHING_COMPLETION_ROOM_ID = "402536772"

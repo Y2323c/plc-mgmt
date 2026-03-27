@@ -7,12 +7,18 @@ import streamlit as st
 import pandas as pd
 from utils.supabase_client import get_client, insert_record
 from utils.ui_helpers import member_selectbox
-from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO, DATE_FMT_YMD
+from utils.chatwork import send_message
+from utils.secrets import get_secret
+from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO, DATE_FMT_YMD, COACHING_COMPLETION_ROOM_ID
+
+COACHING_CW_TOKEN = get_secret("CHATWORK_COACHING_API_TOKEN")
 
 st.title("コーチング記録")
 
 if "_toast" in st.session_state:
     st.toast(st.session_state.pop("_toast"), icon="✅")
+if st.session_state.pop("_ticket_completed", False):
+    st.success("🎉 全セッションが完了しました。チケットを終了し、完了通知を送信しました。")
 
 sb = get_client()
 
@@ -111,6 +117,16 @@ with tab_session:
             "note":              note or None,
             "created_at":        date.today().strftime(DATE_FMT_YMD),
         })
+        # 完了チェック
+        max_sessions = selected_ticket.get("max_sessions") or 0
+        if max_sessions > 0 and next_session >= max_sessions:
+            get_client().table("coaching_tickets").update({"is_active": 0}).eq("id", selected_ticket["id"]).execute()
+            completion_msg = (
+                f"{selected_member['display_name']}様の{selected_ticket.get('coaching_type', '')} {max_sessions}回"
+                f"（担当：{coach_name}）が全セッションを完了しました"
+            )
+            send_message(COACHING_COMPLETION_ROOM_ID, completion_msg, token=COACHING_CW_TOKEN or None)
+            st.session_state["_ticket_completed"] = True
         st.session_state["_toast"] = f"✓ 第{next_session}回セッション記録を追加しました"
         st.rerun()
 

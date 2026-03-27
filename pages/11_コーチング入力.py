@@ -7,7 +7,7 @@ import streamlit as st
 from utils.supabase_client import get_client
 from utils.chatwork import send_message
 from utils.secrets import get_secret
-from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO, DATE_FMT_YMD
+from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO, DATE_FMT_YMD, COACHING_COMPLETION_ROOM_ID
 
 COACHING_CW_TOKEN = get_secret("CHATWORK_COACHING_API_TOKEN")
 
@@ -17,6 +17,8 @@ st.page_link("pages/12_コーチング進捗.py", label="📈 進捗確認ペー
 # トースト表示（保存・送信完了メッセージ）
 if "_toast" in st.session_state:
     st.toast(st.session_state.pop("_toast"), icon="✅")
+if st.session_state.pop("_ticket_completed", False):
+    st.success("🎉 全セッションが完了しました。チケットを終了し、完了通知を送信しました。")
 
 sb = get_client()
 
@@ -75,7 +77,7 @@ if "_notify" in st.session_state:
 # --- 担当メンバー一覧（選択コーチの is_active=1 チケット保有者）---
 tickets = (
     sb.table("coaching_tickets")
-    .select("id, user_id, term_count, coaching_type")
+    .select("id, user_id, term_count, coaching_type, max_sessions, name")
     .eq("coach_name", coach_name)
     .eq("is_active", 1)
     .execute()
@@ -154,6 +156,17 @@ with tab_session:
             "note":              note or None,
             "created_at":        date.today().strftime(DATE_FMT_YMD),
         }).execute()
+        # 完了チェック
+        max_sessions = selected_ticket.get("max_sessions") or 0
+        if max_sessions > 0 and next_session >= max_sessions:
+            sb.table("coaching_tickets").update({"is_active": 0}).eq("id", selected_ticket["id"]).execute()
+            completion_msg = (
+                f"{selected_name}様の{selected_ticket.get('coaching_type', '')} {max_sessions}回"
+                f"（担当：{coach_name}）が全セッションを完了しました"
+            )
+            send_message(COACHING_COMPLETION_ROOM_ID, completion_msg, token=COACHING_CW_TOKEN or None)
+            st.session_state["_ticket_completed"] = True
+
         st.session_state["_toast"]  = "保存しました"
         st.session_state["_notify"] = {
             "member_name": selected_name,
