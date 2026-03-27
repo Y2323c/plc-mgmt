@@ -9,7 +9,6 @@ from utils.supabase_client import get_client
 from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO
 
 st.title("コーチング進捗")
-st.page_link("pages/11_コーチング入力.py", label="📝 記録入力ページへ", icon=None)
 
 sb = get_client()
 
