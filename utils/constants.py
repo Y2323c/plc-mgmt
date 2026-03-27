@@ -19,6 +19,21 @@ CAT_WS      = "WS"
 CAT_TEAM    = "チーム"
 CAT_CONSULT = "コンサル"
 
+# ── m_status カテゴリキー ──
+M_STATUS_CAT_COACH         = "coach"
+M_STATUS_CAT_COACHING_TYPE = "coaching_type"
+
+# ── コーチングログ種別 ──
+LOG_TYPE_SESSION = "session"
+LOG_TYPE_MEMO    = "memo"
+
+# ── コーチング種別ごとのデフォルト値 ──
+COACHING_TYPE_DEFAULTS = {
+    "新規コーチング": {"max_sessions": 7, "duration_months": 11},
+    "継続コーチング": {"max_sessions": 2, "duration_months": 12},
+    "追加コーチング": {"max_sessions": 0, "duration_months": 0},
+}
+
 # ── 選択肢リスト ──
 ACTIVITY_TYPES   = ["プロデューサー", "コンテンツホルダー", "両方", "未定"]
 CONSULT_TYPES    = ["個別", "10分"]

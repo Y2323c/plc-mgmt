@@ -10,7 +10,6 @@ apply_style()
 pg = st.navigation([
     st.Page("pages/01_会員管理.py",         title="会員管理 — 追加・修正・削除",                  icon="⚫"),
     st.Page("pages/07_受講生ログ.py",        title="受講生ログ — 全履歴確認",                      icon="⚫"),
-    st.Page("pages/10_統計・レポート.py",    title="統計・レポート — 出席集計",                    icon="⚫"),
     st.Page("pages/05_イベント管理.py",       title="イベント管理 — WS・チーム登録",                icon="⚫"),
     st.Page("pages/09_アンケート配信.py",     title="出欠アンケート配信 — URL生成・送付",           icon="⚫"),
     st.Page("pages/08_アンケート.py",         title="出欠アンケート個別登録 — 事務局入力用",        icon="⚫"),

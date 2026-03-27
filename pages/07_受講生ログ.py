@@ -103,8 +103,8 @@ with tab_ticket:
     )
 
     show_dataframe(
-        [{"期": t.get("term_count") or "", "コーチ": t.get("coach_name") or "", "開始日": t.get("start_date") or "", "有効期限": t.get("expired_at") or "", "最大回数": t.get("max_sessions") or "", "期間(月)": t.get("duration_months") or "", "有効": "✅" if t.get("is_active") == 1 else "終了"} for t in tickets],
-        {"期": "期", "コーチ": "コーチ", "開始日": "開始日", "有効期限": "有効期限", "最大回数": "最大回数", "期間(月)": "期間(月)", "有効": "有効"}
+        [{"期": t.get("term_count") or "", "種別": t.get("coaching_type") or "", "コーチ": t.get("coach_name") or "", "開始日": t.get("start_date") or "", "有効期限": t.get("expired_at") or "", "最大回数": t.get("max_sessions") or "", "期間(月)": t.get("duration_months") or "", "有効": "✅" if t.get("is_active") == 1 else "終了"} for t in tickets],
+        {"期": "期", "種別": "種別", "コーチ": "コーチ", "開始日": "開始日", "有効期限": "有効期限", "最大回数": "最大回数", "期間(月)": "期間(月)", "有効": "有効"}
     )
 
 # ================================================
@@ -121,6 +121,6 @@ with tab_coaching:
     )
 
     show_dataframe(
-        [{"期": c.get("term_count") or "", "回数": c.get("session_count") or "", "セッション日": c.get("session_date") or "", "次回予定": c.get("next_session_date") or "", "コーチ": c.get("coach_name") or "", "メモ": c.get("note") or ""} for c in clogs],
-        {"期": "期", "回数": "回数", "セッション日": "セッション日", "次回予定": "次回予定", "コーチ": "コーチ", "メモ": "メモ"}
+        [{"種別": "セッション" if c.get("log_type") == "session" else "メモ", "期": c.get("term_count") or "", "回数": c.get("session_count") or "", "セッション日": c.get("session_date") or "", "次回予定": c.get("next_session_date") or "", "コーチ": c.get("coach_name") or "", "メモ": c.get("note") or ""} for c in clogs],
+        {"種別": "種別", "期": "期", "回数": "回数", "セッション日": "セッション日", "次回予定": "次回予定", "コーチ": "コーチ", "メモ": "メモ"}
     )

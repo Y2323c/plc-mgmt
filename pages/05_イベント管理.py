@@ -9,6 +9,9 @@ from utils.ui_helpers import event_selectbox, show_dataframe
 
 st.title("イベント管理（WS / チーム）")
 
+if "_toast" in st.session_state:
+    st.toast(st.session_state.pop("_toast"), icon="✅")
+
 sb = get_client()
 
 # --- イベント一覧 ---
@@ -43,7 +46,7 @@ with col_new:
                 "label": label,
                 "note": note or None,
             })
-            st.success(f"✓ {category} {label}（{event_date}）を追加しました")
+            st.session_state["_toast"] = f"✓ {category} {label}（{event_date}）を追加しました"
             st.rerun()
 
 # ====== 編集 ======
@@ -75,5 +78,5 @@ with col_edit:
                         "label": edit_label,
                         "note": edit_note or None,
                     })
-                    st.success(f"✓ 更新しました: {edit_label}")
+                    st.session_state["_toast"] = f"✓ 更新しました: {edit_label}"
                     st.rerun()

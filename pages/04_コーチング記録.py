@@ -7,10 +7,18 @@ import streamlit as st
 import pandas as pd
 from utils.supabase_client import get_client, insert_record
 from utils.ui_helpers import member_selectbox
+from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION
 
 st.title("コーチング記録")
 
+if "_toast" in st.session_state:
+    st.toast(st.session_state.pop("_toast"), icon="✅")
+
 sb = get_client()
+
+# --- コーチ一覧取得 ---
+_coaches_raw = sb.table("m_status").select("label").eq("category", M_STATUS_CAT_COACH).order("code").execute().data
+COACH_LIST = [c["label"] for c in _coaches_raw]
 
 # --- サイドバー ---
 with st.sidebar:
@@ -29,18 +37,20 @@ if not tickets:
     st.warning("チケットがありません。先にコーチングチケットを登録してください。")
     st.stop()
 
-ticket_labels = [f"{t['term_count']}期（{t['start_date'] or '日付なし'}）{'✓' if t['is_active'] else ''}" for t in tickets]
+ticket_labels = [f"{t['term_count']}期 — {t.get('coaching_type') or '種別なし'}（{t.get('coach_name') or 'コーチ未定'}）{'✓' if t['is_active'] else ''}" for t in tickets]
 ticket_idx = st.selectbox("チケット選択", range(len(tickets)), format_func=lambda i: ticket_labels[i])
 selected_ticket = tickets[ticket_idx]
 
 # --- セッション一覧 ---
 logs = sb.table("coaching_logs").select("*").eq("ticket_id", selected_ticket["id"]).order("session_count").execute().data
 
-st.subheader(f"{selected_ticket['term_count']}期 セッション記録（{len(logs)}件）")
+session_count_total = sum(1 for l in logs if l.get("log_type") == LOG_TYPE_SESSION)
+st.subheader(f"{selected_ticket['term_count']}期 記録（セッション{session_count_total}回 / 全{len(logs)}件）")
 
 if logs:
     df = pd.DataFrame([{
-        "回": l["session_count"],
+        "種別": "セッション" if l.get("log_type") == LOG_TYPE_SESSION else "メモ",
+        "回": l["session_count"] or "",
         "セッション日": l["session_date"] or "",
         "次回予定": l["next_session_date"] or "",
         "コーチ": l["coach_name"] or "",
@@ -53,7 +63,7 @@ else:
 
 # --- 追加フォーム ---
 st.divider()
-next_session = len(logs) + 1
+next_session = session_count_total + 1
 st.subheader(f"第{next_session}回 セッション記録を追加")
 
 with st.form("coaching_log_form"):
@@ -63,7 +73,8 @@ with st.form("coaching_log_form"):
         session_date = st.date_input("セッション日", value=date.today())
         next_session_date = st.date_input("次回予定日", value=None)
     with col2:
-        coach_name = st.text_input("コーチ名", value=selected_ticket["coach_name"] or "")
+        _coach_default = selected_ticket["coach_name"] if selected_ticket.get("coach_name") in COACH_LIST else (COACH_LIST[0] if COACH_LIST else None)
+        coach_name = st.selectbox("コーチ", COACH_LIST, index=COACH_LIST.index(_coach_default) if _coach_default in COACH_LIST else 0)
         note = st.text_area("メモ（セッション内容・気づきなど）", height=150)
 
     submitted = st.form_submit_button("追加")
@@ -80,7 +91,8 @@ if submitted:
         "next_session_date": str(next_session_date) if next_session_date else None,
         "coach_name": coach_name or None,
         "note": note or None,
+        "log_type": LOG_TYPE_SESSION,
         "created_at": str(date.today()),
     })
-    st.success(f"✓ 第{session_count}回セッション記録を追加しました")
+    st.session_state["_toast"] = f"✓ 第{session_count}回セッション記録を追加しました"
     st.rerun()

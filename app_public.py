@@ -13,7 +13,8 @@ st.set_page_config(
 apply_style(public_mode=True)
 
 pg = st.navigation([
-    st.Page("pages/08_アンケート.py", title="出欠アンケート — 回答フォーム"),          # / でアクセス
-    st.Page("pages/06_出席管理.py",   title="出席管理 — チェックイン", url_path="checkin"),  # /checkin でアクセス
+    st.Page("pages/08_アンケート.py",     title="出欠アンケート — 回答フォーム"),                          # /
+    st.Page("pages/06_出席管理.py",       title="出席管理 — チェックイン",       url_path="checkin"),    # /checkin
+    st.Page("pages/11_コーチング入力.py", title="コーチング記録 — 入力フォーム", url_path="coaching"),   # /coaching
 ])
 pg.run()
