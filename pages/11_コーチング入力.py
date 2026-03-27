@@ -103,7 +103,7 @@ uid_to_name = {m["user_id"]: m["clean_name"] for m in members_raw}
 member_options = sorted([uid_to_name.get(uid, uid) for uid in user_ids])
 
 # --- メンバー選択 ---
-selected_name = st.selectbox("担当メンバーを選択してください", member_options)
+selected_name = st.selectbox("担当メンバーを選択してください（有効なチケットがあるメンバーのみ表示）", member_options)
 selected_uid  = next((uid for uid, name in uid_to_name.items() if name == selected_name), None)
 
 if not selected_uid:
