@@ -102,9 +102,31 @@ with tab_ticket:
         .data
     )
 
+    # チケット別セッション回数を取得
+    ticket_ids = [t["id"] for t in tickets]
+    if ticket_ids:
+        session_logs = (
+            sb.table("coaching_logs")
+            .select("ticket_id")
+            .in_("ticket_id", ticket_ids)
+            .eq("log_type", "session")
+            .execute()
+            .data
+        )
+        from collections import Counter
+        session_counts = Counter(l["ticket_id"] for l in session_logs)
+    else:
+        session_counts = {}
+
+    def _remaining(t):
+        max_s = t.get("max_sessions") or 0
+        if not max_s:
+            return "—"
+        return max_s - session_counts.get(t["id"], 0)
+
     show_dataframe(
-        [{"期": t.get("term_count") or "", "種別": t.get("coaching_type") or "", "コーチ": t.get("coach_name") or "", "開始日": t.get("start_date") or "", "有効期限": t.get("expired_at") or "", "最大回数": t.get("max_sessions") or "", "期間(月)": t.get("duration_months") or "", "有効": "✅" if t.get("is_active") == 1 else "終了"} for t in tickets],
-        {"期": "期", "種別": "種別", "コーチ": "コーチ", "開始日": "開始日", "有効期限": "有効期限", "最大回数": "最大回数", "期間(月)": "期間(月)", "有効": "有効"}
+        [{"期": t.get("term_count") or "", "種別": t.get("coaching_type") or "", "コーチ": t.get("coach_name") or "", "開始日": t.get("start_date") or "", "有効期限": t.get("expired_at") or "", "最大回数": t.get("max_sessions") or "", "残り回数": _remaining(t), "有効": "✅" if t.get("is_active") == 1 else "終了"} for t in tickets],
+        {"期": "期", "種別": "種別", "コーチ": "コーチ", "開始日": "開始日", "有効期限": "有効期限", "最大回数": "最大回数", "残り回数": "残り回数", "有効": "有効"}
     )
 
 # ================================================
