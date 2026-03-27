@@ -6,9 +6,10 @@ from datetime import date
 import streamlit as st
 import pandas as pd
 from utils.supabase_client import get_client
-from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO
+from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO, PUBLIC_APP_BASE_URL
 
 st.title("コーチング進捗")
+st.page_link(f"{PUBLIC_APP_BASE_URL}/coaching", label="📝 記録入力ページへ")
 
 sb = get_client()
 
