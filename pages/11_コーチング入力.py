@@ -8,7 +8,6 @@ from utils.supabase_client import get_client
 from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO, DATE_FMT_YMD
 
 st.title("コーチング記録")
-st.page_link("pages/12_コーチング進捗.py", label="📈 進捗確認ページへ", icon=None)
 
 sb = get_client()
 
@@ -28,6 +27,8 @@ coach_name = st.selectbox(
 
 if not coach_name:
     st.stop()
+
+st.markdown(f'<a href="/coaching_status?coach={coach_name}" target="_self">📈 進捗確認ページへ →</a>', unsafe_allow_html=True)
 
 # --- 担当メンバー一覧（選択コーチの is_active=1 チケット保有者）---
 tickets = (
