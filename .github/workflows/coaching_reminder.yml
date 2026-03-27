@@ -3,7 +3,7 @@ name: コーチングリマインド
 on:
   schedule:
     - cron: '0 23 * * *'  # JST 8:00（前日確認通知）
-    - cron: '0 0 * * *'   # JST 9:00（本番送信）
+    - cron: '0 9 * * *'   # JST 18:00（本番送信）
   workflow_dispatch:       # 手動実行ボタン
     inputs:
       preview:
