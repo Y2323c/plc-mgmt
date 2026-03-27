@@ -6,7 +6,10 @@ from datetime import date
 import streamlit as st
 from utils.supabase_client import get_client
 from utils.chatwork import send_message
+from utils.secrets import get_secret
 from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO, DATE_FMT_YMD
+
+COACHING_CW_TOKEN = get_secret("CHATWORK_COACHING_API_TOKEN")
 
 st.title("コーチング記録")
 st.page_link("pages/12_コーチング進捗.py", label="📈 進捗確認ページへ", icon=None)
@@ -48,7 +51,7 @@ if "_notify" in st.session_state:
         if st.button("📨 Chatworkに送信", type="primary"):
             room_id = n.get("room_id")
             if room_id:
-                send_message(room_id, full_msg)
+                send_message(room_id, full_msg, token=COACHING_CW_TOKEN or None)
                 st.success("送信しました")
             else:
                 st.warning(f"{n.get('coach_name', '')} のroom_idが未設定です。Supabaseのm_statusで設定してください。")

@@ -80,10 +80,17 @@ def get_all_dm_room_ids() -> dict[str, str]:
     return dm_map
 
 
-def send_message(room_id: str, message: str) -> bool:
+def send_message(room_id: str, message: str, token: str | None = None) -> bool:
     """
     指定ルームにメッセージを送信する。
+    token を指定した場合はそのトークンを使用（コーチング通知など別アカウント用）。
     成功で True、失敗で False。
     """
-    res = _post(f"/rooms/{room_id}/messages", {"body": message})
+    headers = {"X-ChatWorkToken": token} if token else _headers()
+    res = requests.post(
+        f"{CHATWORK_API_BASE}/rooms/{room_id}/messages",
+        headers=headers,
+        data={"body": message},
+        timeout=CHATWORK_TIMEOUT,
+    )
     return res.ok
