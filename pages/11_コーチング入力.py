@@ -18,7 +18,7 @@ sb = get_client()
 
 # --- コーチ一覧取得（room_id も取得）---
 _coaches_raw = sb.table("m_status").select("label, room_id").eq("category", M_STATUS_CAT_COACH).order("code").execute().data
-COACH_LIST    = [c["label"] for c in _coaches_raw if c["label"] != ".準備中"]
+COACH_LIST    = [c["label"] for c in _coaches_raw]
 coach_room_ids = {c["label"]: c.get("room_id") for c in _coaches_raw}
 
 # --- コーチ選択（URLパラメータ対応）---
