@@ -214,6 +214,7 @@ with tab_progress:
             "名前":             uid_to_name.get(t["user_id"], ""),
             "種別":             t.get("coaching_type") or "",
             "累計回数":         f"{session_count} / {max_sessions}" if max_sessions else str(session_count),
+            "残り回数":         (max_sessions - session_count) if max_sessions else "—",
             "最終セッション日": last_date or "—",
             "経過日数":         elapsed if elapsed is not None else "—",
             "次回予定日":       next_date or "—",
