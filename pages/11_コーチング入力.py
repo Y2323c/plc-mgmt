@@ -5,6 +5,7 @@ import uuid
 from datetime import date
 import streamlit as st
 from utils.supabase_client import get_client
+from utils.chatwork import send_message
 from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO, DATE_FMT_YMD
 
 st.title("コーチング記録")
@@ -12,12 +13,13 @@ st.page_link("pages/12_コーチング進捗.py", label="📈 進捗確認ペー
 
 sb = get_client()
 
-# --- コーチ一覧取得 ---
-_coaches_raw = sb.table("m_status").select("label").eq("category", M_STATUS_CAT_COACH).order("code").execute().data
-COACH_LIST = [c["label"] for c in _coaches_raw if c["label"] != ".準備中"]
+# --- コーチ一覧取得（room_id も取得）---
+_coaches_raw = sb.table("m_status").select("label, room_id").eq("category", M_STATUS_CAT_COACH).order("code").execute().data
+COACH_LIST    = [c["label"] for c in _coaches_raw if c["label"] != ".準備中"]
+coach_room_ids = {c["label"]: c.get("room_id") for c in _coaches_raw}
 
 # --- コーチ選択（URLパラメータ対応）---
-param_coach = st.query_params.get("coach")
+param_coach   = st.query_params.get("coach")
 _coach_default = param_coach if param_coach in COACH_LIST else (COACH_LIST[0] if COACH_LIST else None)
 
 coach_name = st.selectbox(
@@ -28,6 +30,35 @@ coach_name = st.selectbox(
 
 if not coach_name:
     st.stop()
+
+# --- Chatwork通知セクション（セッション記録後に出現）---
+if "_notify" in st.session_state:
+    n = st.session_state["_notify"]
+    next_label = n["next_date"] or "未定"
+    base_msg = f"コーチング完了報告：{n['member_name']} 様\n次回予定：{next_label}\nお疲れさまでした！"
+
+    st.divider()
+    st.subheader("📨 Chatworkに通知しますか？")
+    extra = st.text_area("追加メッセージ（任意）", key="notify_extra", placeholder="必要な場合は追記してください")
+    full_msg = base_msg + (f"\n\n{extra}" if extra else "")
+    st.code(full_msg, language=None)
+
+    col_send, col_skip = st.columns([1, 1])
+    with col_send:
+        if st.button("📨 Chatworkに送信", type="primary"):
+            room_id = n.get("room_id")
+            if room_id:
+                send_message(room_id, full_msg)
+                st.success("送信しました")
+            else:
+                st.warning(f"{n.get('coach_name', '')} のroom_idが未設定です。Supabaseのm_statusで設定してください。")
+            del st.session_state["_notify"]
+            st.rerun()
+    with col_skip:
+        if st.button("スキップ"):
+            del st.session_state["_notify"]
+            st.rerun()
+    st.divider()
 
 # --- 担当メンバー一覧（選択コーチの is_active=1 チケット保有者）---
 tickets = (
@@ -61,7 +92,7 @@ member_options = sorted([uid_to_name.get(uid, uid) for uid in user_ids])
 
 # --- メンバー選択 ---
 selected_name = st.selectbox("担当メンバーを選択してください", member_options)
-selected_uid = next((uid for uid, name in uid_to_name.items() if name == selected_name), None)
+selected_uid  = next((uid for uid, name in uid_to_name.items() if name == selected_name), None)
 
 if not selected_uid:
     st.stop()
@@ -93,7 +124,7 @@ with tab_session:
     with st.form("session_form"):
         col1, col2 = st.columns(2)
         with col1:
-            session_date = st.date_input("セッション日", value=date.today())
+            session_date      = st.date_input("セッション日", value=date.today())
             next_session_date = st.date_input("次回予定日（任意）", value=None)
         with col2:
             note = st.text_area("メモ（セッション内容・気づきなど）", height=150)
@@ -101,21 +132,26 @@ with tab_session:
 
     if submitted_session:
         sb.table("coaching_logs").insert({
-            "id": str(uuid.uuid4()),
-            "ticket_id": selected_ticket["id"],
-            "user_id": selected_uid,
-            "name": selected_name,
-            "log_type": LOG_TYPE_SESSION,
-            "session_count": next_session,
-            "term_count": selected_ticket["term_count"],
-            "session_date": session_date.strftime(DATE_FMT_YMD),
+            "id":                str(uuid.uuid4()),
+            "ticket_id":         selected_ticket["id"],
+            "user_id":           selected_uid,
+            "name":              selected_name,
+            "log_type":          LOG_TYPE_SESSION,
+            "session_count":     next_session,
+            "term_count":        selected_ticket["term_count"],
+            "session_date":      session_date.strftime(DATE_FMT_YMD),
             "next_session_date": next_session_date.strftime(DATE_FMT_YMD) if next_session_date else None,
-            "coach_name": coach_name,
-            "note": note or None,
-            "created_at": date.today().strftime(DATE_FMT_YMD),
+            "coach_name":        coach_name,
+            "note":              note or None,
+            "created_at":        date.today().strftime(DATE_FMT_YMD),
         }).execute()
-        st.success(f"✓ {selected_name} さんの第{next_session}回セッションを記録しました")
-        st.balloons()
+        st.session_state["_notify"] = {
+            "member_name": selected_name,
+            "coach_name":  coach_name,
+            "next_date":   next_session_date.strftime(DATE_FMT_YMD) if next_session_date else None,
+            "room_id":     coach_room_ids.get(coach_name),
+        }
+        st.rerun()
 
 # =====================
 # メモタブ
@@ -133,17 +169,17 @@ with tab_memo:
             st.warning("メモを入力してください")
         else:
             sb.table("coaching_logs").insert({
-                "id": str(uuid.uuid4()),
-                "ticket_id": selected_ticket["id"],
-                "user_id": selected_uid,
-                "name": selected_name,
-                "log_type": LOG_TYPE_MEMO,
-                "session_count": None,
-                "term_count": selected_ticket["term_count"],
-                "session_date": memo_date.strftime(DATE_FMT_YMD),
+                "id":                str(uuid.uuid4()),
+                "ticket_id":         selected_ticket["id"],
+                "user_id":           selected_uid,
+                "name":              selected_name,
+                "log_type":          LOG_TYPE_MEMO,
+                "session_count":     None,
+                "term_count":        selected_ticket["term_count"],
+                "session_date":      memo_date.strftime(DATE_FMT_YMD),
                 "next_session_date": None,
-                "coach_name": coach_name,
-                "note": memo_note,
-                "created_at": date.today().strftime(DATE_FMT_YMD),
+                "coach_name":        coach_name,
+                "note":              memo_note,
+                "created_at":        date.today().strftime(DATE_FMT_YMD),
             }).execute()
             st.success(f"✓ {selected_name} さんのメモを保存しました")
