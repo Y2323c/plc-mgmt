@@ -119,7 +119,14 @@ logs = (
     .execute()
     .data
 )
-next_session = sum(1 for l in logs if l.get("log_type") == LOG_TYPE_SESSION) + 1
+session_count_total = sum(1 for l in logs if l.get("log_type") == LOG_TYPE_SESSION)
+next_session = session_count_total + 1
+
+# 上限チェック
+max_sessions = selected_ticket.get("max_sessions") or 0
+if max_sessions > 0 and session_count_total >= max_sessions:
+    st.warning(f"このチケットの全セッション（{max_sessions}回）が完了しています。セッションを追加できません。")
+    st.stop()
 
 st.divider()
 
@@ -157,9 +164,8 @@ with tab_session:
             "created_at":        date.today().strftime(DATE_FMT_YMD),
         }).execute()
         # 完了チェック
-        max_sessions = selected_ticket.get("max_sessions") or 0
         if max_sessions > 0 and next_session >= max_sessions:
-            sb.table("coaching_tickets").update({"is_active": 0}).eq("id", selected_ticket["id"]).execute()
+            sb.rpc("complete_coaching_ticket", {"p_ticket_id": selected_ticket["id"]}).execute()
             completion_msg = (
                 f"{selected_name}様の{selected_ticket.get('coaching_type', '')} {max_sessions}回"
                 f"（担当：{coach_name}）が全セッションを完了しました"
