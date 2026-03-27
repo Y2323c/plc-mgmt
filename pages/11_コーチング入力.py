@@ -14,15 +14,19 @@ COACHING_CW_TOKEN = get_secret("CHATWORK_COACHING_API_TOKEN")
 st.title("コーチング記録")
 st.page_link("pages/12_コーチング進捗.py", label="📈 進捗確認ページへ", icon=None)
 
+# トースト表示（保存・送信完了メッセージ）
+if "_toast" in st.session_state:
+    st.toast(st.session_state.pop("_toast"), icon="✅")
+
 sb = get_client()
 
 # --- コーチ一覧取得（room_id も取得）---
-_coaches_raw = sb.table("m_status").select("label, room_id").eq("category", M_STATUS_CAT_COACH).order("code").execute().data
-COACH_LIST    = [c["label"] for c in _coaches_raw]
+_coaches_raw   = sb.table("m_status").select("label, room_id").eq("category", M_STATUS_CAT_COACH).order("code").execute().data
+COACH_LIST     = [c["label"] for c in _coaches_raw]
 coach_room_ids = {c["label"]: c.get("room_id") for c in _coaches_raw}
 
 # --- コーチ選択（URLパラメータ対応）---
-param_coach   = st.query_params.get("coach")
+param_coach    = st.query_params.get("coach")
 _coach_default = param_coach if param_coach in COACH_LIST else (COACH_LIST[0] if COACH_LIST else None)
 
 coach_name = st.selectbox(
@@ -34,15 +38,17 @@ coach_name = st.selectbox(
 if not coach_name:
     st.stop()
 
-# --- Chatwork通知セクション（セッション記録後に出現）---
+# --- Chatwork通知セクション（セッション保存後に出現）---
 if "_notify" in st.session_state:
     n = st.session_state["_notify"]
     next_label = n["next_date"] or "未定"
-    base_msg = f"コーチング完了報告：{n['member_name']} 様\n次回予定：{next_label}\nお疲れさまでした！"
+    base_msg   = f"コーチング完了報告：{n['member_name']} 様\n次回予定：{next_label}\nお疲れさまでした！"
 
     st.divider()
-    st.subheader("📨 Chatworkに通知しますか？")
-    extra = st.text_area("追加メッセージ（任意）", key="notify_extra", placeholder="必要な場合は追記してください")
+    st.subheader("📨 Chatworkへの通知")
+    st.info("必ず送信してください。内容を確認し、必要に応じて受講生へのメッセージを追記して送信してください。")
+
+    extra    = st.text_area("追加メッセージ（任意）", key="notify_extra", placeholder="受講生へ伝えたいことがあれば追記してください")
     full_msg = base_msg + (f"\n\n{extra}" if extra else "")
     st.code(full_msg, language=None)
 
@@ -52,7 +58,7 @@ if "_notify" in st.session_state:
             room_id = n.get("room_id")
             if room_id:
                 send_message(room_id, full_msg, token=COACHING_CW_TOKEN or None)
-                st.success("送信しました")
+                st.session_state["_toast"] = "Chatworkに送信しました"
             else:
                 st.warning(f"{n.get('coach_name', '')} のroom_idが未設定です。Supabaseのm_statusで設定してください。")
             del st.session_state["_notify"]
@@ -77,11 +83,9 @@ if not tickets:
     st.warning(f"{coach_name} さんが担当している有効なチケットが見つかりません。")
     st.stop()
 
-# user_id → チケット情報のマッピング
-uid_to_ticket = {t["user_id"]: t for t in tickets}
-user_ids = list(uid_to_ticket.keys())
+uid_to_ticket  = {t["user_id"]: t for t in tickets}
+user_ids       = list(uid_to_ticket.keys())
 
-# メンバーの表示名を取得
 members_raw = (
     sb.table("name_mappings")
     .select("user_id, clean_name")
@@ -102,7 +106,6 @@ if not selected_uid:
 
 selected_ticket = uid_to_ticket[selected_uid]
 
-# セッション回数（log_type='session' のみカウント）
 logs = (
     sb.table("coaching_logs")
     .select("id, log_type, session_count, session_date, coach_name, note")
@@ -131,7 +134,7 @@ with tab_session:
             next_session_date = st.date_input("次回予定日（任意）", value=None)
         with col2:
             note = st.text_area("メモ（セッション内容・気づきなど）", height=150)
-        submitted_session = st.form_submit_button("送信", type="primary")
+        submitted_session = st.form_submit_button("保存", type="primary")
 
     if submitted_session:
         sb.table("coaching_logs").insert({
@@ -148,6 +151,7 @@ with tab_session:
             "note":              note or None,
             "created_at":        date.today().strftime(DATE_FMT_YMD),
         }).execute()
+        st.session_state["_toast"]  = "保存しました"
         st.session_state["_notify"] = {
             "member_name": selected_name,
             "coach_name":  coach_name,
@@ -165,7 +169,7 @@ with tab_memo:
     with st.form("memo_form"):
         memo_date = st.date_input("日付", value=date.today())
         memo_note = st.text_area("メモ（気づき・観察・準備など）", height=150)
-        submitted_memo = st.form_submit_button("送信", type="primary")
+        submitted_memo = st.form_submit_button("保存", type="primary")
 
     if submitted_memo:
         if not memo_note:
@@ -185,4 +189,5 @@ with tab_memo:
                 "note":              memo_note,
                 "created_at":        date.today().strftime(DATE_FMT_YMD),
             }).execute()
-            st.success(f"✓ {selected_name} さんのメモを保存しました")
+            st.session_state["_toast"] = "メモを保存しました"
+            st.rerun()
