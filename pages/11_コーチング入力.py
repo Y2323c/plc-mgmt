@@ -48,9 +48,12 @@ if "_notify" in st.session_state:
     st.subheader("📨 Chatworkへの通知")
     st.info("必ず送信してください。内容を確認し、必要に応じて受講生へのメッセージを追記して送信してください。")
 
-    extra    = st.text_area("追加メッセージ（任意）", key="notify_extra", placeholder="受講生へ伝えたいことがあれば追記してください")
-    full_msg = base_msg + (f"\n\n{extra}" if extra else "")
-    st.code(full_msg, language=None)
+    full_msg = st.text_area(
+        "メッセージ内容（確認・編集できます）",
+        value=base_msg,
+        height=160,
+        key="notify_msg",
+    )
 
     col_send, col_skip = st.columns([1, 1])
     with col_send:
