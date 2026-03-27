@@ -95,7 +95,7 @@ def _ym(date_str: str | None) -> str:
 
 
 # ── タブ ────────────────────────────────────────────
-tab_progress, tab_memos, tab_history = st.tabs(["📊 進捗", "💬 メモ", "📋 実施履歴"])
+tab_progress, tab_memos, tab_history, tab_coach = st.tabs(["📊 進捗", "💬 メモ", "📋 実施履歴", "📈 コーチ別サマリー"])
 
 # ===================================================
 # 📊 進捗タブ
@@ -210,3 +210,93 @@ with tab_history:
             st.dataframe(pd.DataFrame(history_rows), use_container_width=True, hide_index=True)
         else:
             st.info("記録がありません。")
+
+
+# ===================================================
+# 📈 コーチ別サマリータブ
+# ===================================================
+with tab_coach:
+    # 全コーチの有効チケットとセッションログを取得
+    all_tickets = (
+        sb.table("coaching_tickets")
+        .select("id, user_id, coach_name, coaching_type")
+        .eq("is_active", 1)
+        .execute()
+        .data
+    )
+    all_ticket_ids = [t["id"] for t in all_tickets]
+
+    if all_ticket_ids:
+        all_session_logs = (
+            sb.table("coaching_logs")
+            .select("ticket_id, coach_name, session_date, log_type")
+            .in_("ticket_id", all_ticket_ids)
+            .eq("log_type", LOG_TYPE_SESSION)
+            .execute()
+            .data
+        )
+    else:
+        all_session_logs = []
+
+    this_month = today.strftime("%Y-%m")
+
+    # コーチ別集計
+    coach_members:  dict[str, set]  = defaultdict(set)
+    coach_sessions: dict[str, int]  = defaultdict(int)
+    coach_monthly:  dict[str, int]  = defaultdict(int)
+    coach_last:     dict[str, str]  = {}
+
+    for t in all_tickets:
+        cn = t.get("coach_name") or "未設定"
+        coach_members[cn].add(t["user_id"])
+
+    for l in all_session_logs:
+        cn = l.get("coach_name") or "未設定"
+        coach_sessions[cn] += 1
+        ym = _ym(l.get("session_date"))
+        if ym == this_month:
+            coach_monthly[cn] += 1
+        sd = l.get("session_date") or ""
+        if sd > coach_last.get(cn, ""):
+            coach_last[cn] = sd
+
+    summary_rows = sorted(
+        [
+            {
+                "コーチ":     cn,
+                "担当人数":   len(coach_members[cn]),
+                "累計実施数": coach_sessions.get(cn, 0),
+                "今月の実施": coach_monthly.get(cn, 0),
+                "最終実施日": coach_last.get(cn) or "—",
+            }
+            for cn in coach_members
+        ],
+        key=lambda x: x["累計実施数"],
+        reverse=True,
+    )
+    st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+
+    # 月別コーチ別ピボット
+    st.divider()
+    st.subheader("月別コーチ別実施数")
+    if all_session_logs:
+        pivot_data: dict[tuple, int] = defaultdict(int)
+        for l in all_session_logs:
+            cn = l.get("coach_name") or "未設定"
+            ym = _ym(l.get("session_date"))
+            if ym:
+                pivot_data[(cn, ym)] += 1
+
+        coaches_in_pivot = sorted({k[0] for k in pivot_data})
+        months_in_pivot  = sorted({k[1] for k in pivot_data}, reverse=True)
+
+        pivot_rows = []
+        for cn in coaches_in_pivot:
+            row = {"コーチ": cn}
+            for ym in months_in_pivot:
+                row[ym] = pivot_data.get((cn, ym), 0)
+            pivot_rows.append(row)
+
+        st.dataframe(pd.DataFrame(pivot_rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("セッション記録がありません。")
