@@ -59,7 +59,8 @@ all_logs = (
     .data
 )
 
-today = date.today()
+today      = date.today()
+this_month = today.strftime("%Y-%m")
 
 
 def _days_since(date_str: str | None) -> int | None:
@@ -100,7 +101,6 @@ with tab_coach:
     )
 
     session_logs_all = [l for l in all_logs if l.get("log_type") == LOG_TYPE_SESSION]
-    this_month = today.strftime("%Y-%m")
 
     # コーチ別集計（常に全コーチ表示）
     coach_members:  dict[str, set] = defaultdict(set)
@@ -126,13 +126,11 @@ with tab_coach:
             {
                 "コーチ":     cn,
                 "担当人数":   len(coach_members[cn]),
-                "累計実施数": coach_sessions.get(cn, 0),
                 "今月の実施": coach_monthly.get(cn, 0),
-                "最終実施日": coach_last.get(cn) or "—",
             }
             for cn in coach_members
         ],
-        key=lambda x: x["累計実施数"],
+        key=lambda x: x["今月の実施"],
         reverse=True,
     )
     st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
@@ -191,7 +189,9 @@ for l in all_logs:
 # ===================================================
 with tab_progress:
     all_months = sorted({_ym(l["session_date"]) for l in session_logs if _ym(l["session_date"])}, reverse=True)
-    selected_month = st.selectbox("月でフィルター", ["全期間"] + all_months, key="month_filter")
+    month_options = ["全期間"] + all_months
+    _month_default = month_options.index(this_month) if this_month in month_options else 0
+    selected_month = st.selectbox("月でフィルター", month_options, index=_month_default, key="month_filter")
 
     rows = []
     for t in filtered_tickets:
