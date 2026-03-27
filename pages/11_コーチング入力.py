@@ -139,86 +139,50 @@ _col2.metric("残り回数", (max_sessions - session_count_total) if max_session
 _col3.metric("最終セッション日", last_session_date or "—")
 st.divider()
 
-# --- タブ ---
-tab_session, tab_memo = st.tabs(["📝 セッション記録", "💬 メモ"])
-
 # =====================
-# セッション記録タブ
+# セッション記録
 # =====================
-with tab_session:
-    st.subheader(f"{selected_name} — 第{next_session}回 セッション記録")
+st.subheader(f"{selected_name} — 第{next_session}回 セッション記録")
 
-    with st.form("session_form"):
-        col1, col2 = st.columns(2)
-        with col1:
-            session_date      = st.date_input("セッション日", value=date.today())
-            next_session_date = st.date_input("次回予定日（任意）", value=None)
-        with col2:
-            note = st.text_area("メモ（セッション内容・気づきなど）", height=150)
-        submitted_session = st.form_submit_button("保存", type="primary")
+with st.form("session_form"):
+    col1, col2 = st.columns(2)
+    with col1:
+        session_date      = st.date_input("セッション日", value=date.today())
+        next_session_date = st.date_input("次回予定日（任意）", value=None)
+    with col2:
+        note = st.text_area("メモ（セッション内容・気づきなど）", height=150)
+    submitted_session = st.form_submit_button("保存", type="primary")
 
-    if submitted_session:
-        sb.table("coaching_logs").insert({
-            "id":                str(uuid.uuid4()),
-            "ticket_id":         selected_ticket["id"],
-            "user_id":           selected_uid,
-            "name":              selected_name,
-            "log_type":          LOG_TYPE_SESSION,
-            "session_count":     next_session,
-            "term_count":        selected_ticket["term_count"],
-            "session_date":      session_date.strftime(DATE_FMT_YMD),
-            "next_session_date": next_session_date.strftime(DATE_FMT_YMD) if next_session_date else None,
-            "coach_name":        coach_name,
-            "note":              note or None,
-            "created_at":        date.today().strftime(DATE_FMT_YMD),
-        }).execute()
-        # 完了チェック
-        if max_sessions > 0 and next_session >= max_sessions:
-            sb.rpc("complete_coaching_ticket", {"p_ticket_id": selected_ticket["id"]}).execute()
-            completion_msg = (
-                f"{selected_name}様の{selected_ticket.get('coaching_type', '')} {max_sessions}回"
-                f"（担当：{coach_name}）が全セッションを完了しました"
-            )
-            send_message(COACHING_COMPLETION_ROOM_ID, completion_msg, token=COACHING_CW_TOKEN or None)
-            st.session_state["_ticket_completed"] = True
+if submitted_session:
+    sb.table("coaching_logs").insert({
+        "id":                str(uuid.uuid4()),
+        "ticket_id":         selected_ticket["id"],
+        "user_id":           selected_uid,
+        "name":              selected_name,
+        "log_type":          LOG_TYPE_SESSION,
+        "session_count":     next_session,
+        "term_count":        selected_ticket["term_count"],
+        "session_date":      session_date.strftime(DATE_FMT_YMD),
+        "next_session_date": next_session_date.strftime(DATE_FMT_YMD) if next_session_date else None,
+        "coach_name":        coach_name,
+        "note":              note or None,
+        "created_at":        date.today().strftime(DATE_FMT_YMD),
+    }).execute()
+    # 完了チェック
+    if max_sessions > 0 and next_session >= max_sessions:
+        sb.rpc("complete_coaching_ticket", {"p_ticket_id": selected_ticket["id"]}).execute()
+        completion_msg = (
+            f"{selected_name}様の{selected_ticket.get('coaching_type', '')} {max_sessions}回"
+            f"（担当：{coach_name}）が全セッションを完了しました"
+        )
+        send_message(COACHING_COMPLETION_ROOM_ID, completion_msg, token=COACHING_CW_TOKEN or None)
+        st.session_state["_ticket_completed"] = True
 
-        st.session_state["_toast"]  = "保存しました"
-        st.session_state["_notify"] = {
-            "member_name": selected_name,
-            "coach_name":  coach_name,
-            "next_date":   next_session_date.strftime(DATE_FMT_YMD) if next_session_date else None,
-            "room_id":     coach_room_ids.get(coach_name),
-        }
-        st.rerun()
-
-# =====================
-# メモタブ
-# =====================
-with tab_memo:
-    st.subheader(f"{selected_name} — メモ")
-
-    with st.form("memo_form"):
-        memo_date = st.date_input("日付", value=date.today())
-        memo_note = st.text_area("メモ（気づき・観察・準備など）", height=150)
-        submitted_memo = st.form_submit_button("保存", type="primary")
-
-    if submitted_memo:
-        if not memo_note:
-            st.warning("メモを入力してください")
-        else:
-            sb.table("coaching_logs").insert({
-                "id":                str(uuid.uuid4()),
-                "ticket_id":         selected_ticket["id"],
-                "user_id":           selected_uid,
-                "name":              selected_name,
-                "log_type":          LOG_TYPE_MEMO,
-                "session_count":     None,
-                "term_count":        selected_ticket["term_count"],
-                "session_date":      memo_date.strftime(DATE_FMT_YMD),
-                "next_session_date": None,
-                "coach_name":        coach_name,
-                "note":              memo_note,
-                "created_at":        date.today().strftime(DATE_FMT_YMD),
-            }).execute()
-            st.session_state["_toast"] = "メモを保存しました"
-            st.rerun()
+    st.session_state["_toast"]  = "保存しました"
+    st.session_state["_notify"] = {
+        "member_name": selected_name,
+        "coach_name":  coach_name,
+        "next_date":   next_session_date.strftime(DATE_FMT_YMD) if next_session_date else None,
+        "room_id":     coach_room_ids.get(coach_name),
+    }
+    st.rerun()
