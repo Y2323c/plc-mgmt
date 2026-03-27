@@ -95,14 +95,14 @@ sb    = get_client()
 today = date.today()
 
 # ── 自動送信ステータス ────────────────────────────────────────────────────
-skip_row = (
+skip_data = (
     sb.table("reminder_skip_dates")
     .select("skip_date")
     .eq("skip_date", str(today))
-    .maybe_single()
     .execute()
     .data
 )
+skip_row = bool(skip_data)
 
 with st.container(border=True):
     if skip_row:

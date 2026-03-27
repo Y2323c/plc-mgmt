@@ -200,15 +200,14 @@ def run():
     print(f"[{today}] コーチングリマインド実行開始")
 
     # スキップフラグ確認
-    skip_row = (
+    skip_data = (
         sb.table("reminder_skip_dates")
         .select("skip_date")
         .eq("skip_date", str(today))
-        .maybe_single()
         .execute()
         .data
     )
-    if skip_row:
+    if skip_data:
         print(f"[{today}] スキップフラグあり。送信をキャンセルします。")
         return
 
