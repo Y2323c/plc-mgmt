@@ -6,13 +6,13 @@ from datetime import date
 import streamlit as st
 import pandas as pd
 from utils.supabase_client import get_client
-from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION
+from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO
 
 st.title("コーチング進捗")
 
 sb = get_client()
 
-# コーチ一覧
+# ── コーチ一覧 ──────────────────────────────────────
 _coaches_raw = (
     sb.table("m_status")
     .select("label")
@@ -23,15 +23,14 @@ _coaches_raw = (
 )
 COACH_LIST = [c["label"] for c in _coaches_raw if c["label"] != ".準備中"]
 
-# コーチ選択（URLパラメータ対応）
-param_coach = st.query_params.get("coach")
 ALL_COACHES = "（全コーチ）"
 coach_options = [ALL_COACHES] + COACH_LIST
+param_coach = st.query_params.get("coach")
 _default_idx = coach_options.index(param_coach) if param_coach in coach_options else 0
 
 selected_coach = st.selectbox("コーチを選択", coach_options, index=_default_idx)
 
-# チケット取得（is_active=1 のみ）
+# ── チケット取得 ─────────────────────────────────────
 ticket_query = sb.table("coaching_tickets").select("*").eq("is_active", 1)
 if selected_coach != ALL_COACHES:
     ticket_query = ticket_query.eq("coach_name", selected_coach)
@@ -41,7 +40,7 @@ if not tickets:
     st.info("有効なチケットがありません。")
     st.stop()
 
-# ユーザー名取得
+# ── ユーザー名取得 ───────────────────────────────────
 user_ids = list({t["user_id"] for t in tickets})
 members_raw = (
     sb.table("name_mappings")
@@ -52,22 +51,29 @@ members_raw = (
 )
 uid_to_name = {m["user_id"]: m["clean_name"] for m in members_raw}
 
-# セッションログ一括取得
+# ── ログ一括取得（セッション + メモ）────────────────
 ticket_ids = [t["id"] for t in tickets]
-logs_raw = (
+all_logs = (
     sb.table("coaching_logs")
-    .select("ticket_id, log_type, session_date, next_session_date, session_count")
+    .select("ticket_id, user_id, log_type, session_date, next_session_date, session_count, coach_name, note")
     .in_("ticket_id", ticket_ids)
-    .eq("log_type", LOG_TYPE_SESSION)
     .order("session_date")
     .execute()
     .data
 )
 
-# ticket_id → logs マップ
-ticket_logs: dict[str, list] = defaultdict(list)
-for l in logs_raw:
-    ticket_logs[l["ticket_id"]].append(l)
+session_logs = [l for l in all_logs if l.get("log_type") == LOG_TYPE_SESSION]
+memo_logs    = [l for l in all_logs if l.get("log_type") == LOG_TYPE_MEMO]
+
+# ticket_id → session logs マップ
+ticket_sessions: dict[str, list] = defaultdict(list)
+for l in session_logs:
+    ticket_sessions[l["ticket_id"]].append(l)
+
+# user_id → all logs マップ（実施履歴用）
+uid_all_logs: dict[str, list] = defaultdict(list)
+for l in all_logs:
+    uid_all_logs[l["user_id"]].append(l)
 
 today = date.today()
 
@@ -76,48 +82,76 @@ def _days_since(date_str: str | None) -> int | None:
     if not date_str:
         return None
     try:
-        d = date.fromisoformat(date_str.replace("/", "-"))
-        return (today - d).days
+        return (today - date.fromisoformat(date_str.replace("/", "-"))).days
     except Exception:
         return None
 
 
-# 進捗テーブル構築
-rows = []
-for t in tickets:
-    logs = ticket_logs[t["id"]]
-    session_count = len(logs)
-    last_date = logs[-1]["session_date"] if logs else None
-    next_date = logs[-1].get("next_session_date") if logs else None
-    elapsed = _days_since(last_date)
-    max_sessions = t.get("max_sessions") or 0
+def _ym(date_str: str | None) -> str:
+    """'YYYY/MM/DD' or 'YYYY-MM-DD' → 'YYYY-MM'"""
+    if not date_str or len(date_str) < 7:
+        return ""
+    return date_str[:7].replace("/", "-")
 
-    rows.append({
-        "コーチ": t.get("coach_name") or "",
-        "名前": uid_to_name.get(t["user_id"], ""),
-        "種別": t.get("coaching_type") or "",
-        "回数": f"{session_count} / {max_sessions}" if max_sessions else str(session_count),
-        "最終セッション日": last_date or "—",
-        "経過日数": elapsed if elapsed is not None else "—",
-        "次回予定日": next_date or "—",
-    })
 
-df = pd.DataFrame(rows)
-st.dataframe(df, use_container_width=True, hide_index=True)
+# ── タブ ────────────────────────────────────────────
+tab_progress, tab_memos, tab_history = st.tabs(["📊 進捗", "💬 メモ", "📋 実施履歴"])
 
-# ─── 月別セッション実施数 ───────────────────────────
-st.divider()
-st.subheader("月別セッション実施数")
+# ===================================================
+# 📊 進捗タブ
+# ===================================================
+with tab_progress:
 
-if logs_raw:
-    monthly: dict[str, int] = defaultdict(int)
-    for l in logs_raw:
-        d = (l.get("session_date") or "")[:7]  # "YYYY/MM" or "YYYY-MM"
-        if len(d) == 7:
-            ym = d.replace("/", "-")  # 統一: YYYY-MM
-            monthly[ym] += 1
+    # 月フィルター
+    all_months = sorted({_ym(l["session_date"]) for l in session_logs if _ym(l["session_date"])}, reverse=True)
+    month_options = ["全期間"] + all_months
+    selected_month = st.selectbox("月でフィルター", month_options, key="month_filter")
 
-    if monthly:
+    # 進捗テーブル構築
+    rows = []
+    for t in tickets:
+        logs = ticket_sessions[t["id"]]
+        session_count = len(logs)
+        last_date  = logs[-1]["session_date"] if logs else None
+        next_date  = logs[-1].get("next_session_date") if logs else None
+        elapsed    = _days_since(last_date)
+        max_sessions = t.get("max_sessions") or 0
+
+        # 月フィルター: 対象月のセッション数
+        if selected_month != "全期間":
+            month_count = sum(1 for l in logs if _ym(l["session_date"]) == selected_month)
+            if month_count == 0:
+                continue  # 対象月に実施なし → 非表示
+        else:
+            month_count = None
+
+        row = {
+            "コーチ":         t.get("coach_name") or "",
+            "名前":           uid_to_name.get(t["user_id"], ""),
+            "種別":           t.get("coaching_type") or "",
+            "累計回数":       f"{session_count} / {max_sessions}" if max_sessions else str(session_count),
+            "最終セッション日": last_date or "—",
+            "経過日数":       elapsed if elapsed is not None else "—",
+            "次回予定日":     next_date or "—",
+        }
+        if selected_month != "全期間":
+            row["該当月の回数"] = month_count
+        rows.append(row)
+
+    if rows:
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    else:
+        st.info(f"{selected_month} にセッションの記録がありません。")
+
+    # 月別集計
+    st.divider()
+    st.subheader("月別セッション実施数")
+    if session_logs:
+        monthly: dict[str, int] = defaultdict(int)
+        for l in session_logs:
+            ym = _ym(l["session_date"])
+            if ym:
+                monthly[ym] += 1
         monthly_df = pd.DataFrame(
             sorted(monthly.items(), reverse=True),
             columns=["年月", "実施数"],
@@ -125,5 +159,54 @@ if logs_raw:
         st.dataframe(monthly_df, use_container_width=True, hide_index=True)
     else:
         st.info("セッション記録がありません。")
-else:
-    st.info("セッション記録がありません。")
+
+
+# ===================================================
+# 💬 メモタブ
+# ===================================================
+with tab_memos:
+    if memo_logs:
+        memo_rows = sorted(
+            [
+                {
+                    "日付":   l.get("session_date") or "—",
+                    "コーチ": l.get("coach_name") or "—",
+                    "名前":   uid_to_name.get(l["user_id"], ""),
+                    "メモ":   l.get("note") or "",
+                }
+                for l in memo_logs
+            ],
+            key=lambda x: x["日付"],
+            reverse=True,
+        )
+        st.dataframe(pd.DataFrame(memo_rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("メモがありません。")
+
+
+# ===================================================
+# 📋 実施履歴タブ
+# ===================================================
+with tab_history:
+    # メンバー一覧（名前順）
+    member_options = sorted(uid_to_name.values())
+    selected_name = st.selectbox("メンバーを選択", member_options, key="history_member")
+    selected_uid  = next((uid for uid, name in uid_to_name.items() if name == selected_name), None)
+
+    if selected_uid:
+        logs = sorted(uid_all_logs[selected_uid], key=lambda x: x.get("session_date") or "")
+        if logs:
+            history_rows = [
+                {
+                    "種別":     "セッション" if l.get("log_type") == LOG_TYPE_SESSION else "メモ",
+                    "回":       l.get("session_count") or "—",
+                    "日付":     l.get("session_date") or "—",
+                    "次回予定": l.get("next_session_date") or "—",
+                    "コーチ":   l.get("coach_name") or "—",
+                    "メモ":     l.get("note") or "",
+                }
+                for l in logs
+            ]
+            st.dataframe(pd.DataFrame(history_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("記録がありません。")
