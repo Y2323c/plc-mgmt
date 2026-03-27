@@ -16,7 +16,7 @@ pg = st.navigation([
     st.Page("pages/06_出席管理.py",           title="出席管理 — 状況確認、出欠状況の更新（当日）", icon="⚫"),
     st.Page("pages/02_コンサル記録.py",       title="コンサル記録 — 個別・10分 実施記録",          icon="⚫"),
     st.Page("pages/03_コーチングチケット.py", title="コーチングチケット — 設定",                   icon="⚫"),
-    st.Page("pages/04_コーチング記録.py",     title="コーチング記録 — 実施記録",                   icon="⚫"),
+    st.Page("pages/04_コーチング記録.py",     title="コーチング記録（編集、メモなど） — 事務局入力用", icon="⚫"),
     st.Page("pages/12_コーチング進捗.py",     title="コーチング進捗 — セッション状況確認",         icon="⚫"),
 ])
 pg.run()
