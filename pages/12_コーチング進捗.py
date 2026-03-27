@@ -9,6 +9,7 @@ from utils.supabase_client import get_client
 from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO
 
 st.title("コーチング進捗")
+st.page_link("pages/11_コーチング入力.py", label="📝 記録入力ページへ", icon=None)
 
 sb = get_client()
 
@@ -100,8 +101,6 @@ with tab_coach:
         key="coach_filter",
     )
 
-    _input_url = f"/coaching?coach={selected_coach}" if selected_coach != ALL_COACHES else "/coaching"
-    st.markdown(f'<a href="{_input_url}" target="_self">📝 記録入力ページへ →</a>', unsafe_allow_html=True)
 
     session_logs_all = [l for l in all_logs if l.get("log_type") == LOG_TYPE_SESSION]
 
