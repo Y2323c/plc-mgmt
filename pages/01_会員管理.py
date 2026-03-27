@@ -1,13 +1,43 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import re
 import uuid
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime
 from utils.supabase_client import get_client, get_members, get_m_status, insert_record
 from utils.chatwork import find_account_id, get_dm_room_id, send_message
-from utils.constants import ACTIVITY_TYPES, MS_LEFT, DATE_FMT_YM
+from utils.constants import (
+    ACTIVITY_TYPES, MS_LEFT, DATE_FMT_YM, DATE_FMT_YMD,
+    COACHING_TYPE_DEFAULTS, M_STATUS_CAT_COACH,
+)
+from dateutil.relativedelta import relativedelta
+
+
+def _parse_joined_at(val: str) -> date:
+    """joined_at の文字列を date 型に変換。失敗したら今日を返す。"""
+    if not val:
+        return date.today()
+    # "2022/10/01" 形式（日付あり）
+    try:
+        return datetime.strptime(val, "%Y/%m/%d").date()
+    except ValueError:
+        pass
+    # "2022/10" 形式（月のみ）→ 1日として扱う
+    try:
+        return datetime.strptime(val, "%Y/%m").date()
+    except ValueError:
+        pass
+    # "2022年10月14日" 形式
+    m = re.match(r"(\d{4})年(\d{1,2})月(\d{1,2})日", val)
+    if m:
+        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    # "2022年10月" 形式（日なし）→ 1日として扱う
+    m = re.match(r"(\d{4})年(\d{1,2})月", val)
+    if m:
+        return date(int(m.group(1)), int(m.group(2)), 1)
+    return date.today()
 
 st.title("会員管理")
 
@@ -21,7 +51,9 @@ DEFAULT_TEMPLATE = "こんにちは。"
 
 # session_state 初期化
 if "new_member_saved" not in st.session_state:
-    st.session_state["new_member_saved"] = None  # {"id", "name", "cw_account"}
+    st.session_state["new_member_saved"] = None   # {"id", "name", "cw_account"}
+if "new_ticket_for" not in st.session_state:
+    st.session_state["new_ticket_for"] = None     # {"id", "name"}
 
 def check_duplicates(display_name: str, email: str, cw_handle: str,
                      all_members: list, exclude_id: str | None = None) -> list[str]:
@@ -78,12 +110,9 @@ if mode == "新規追加" or selected:
             value=selected.get("name") or "" if selected else "",
             placeholder="本名を入力してください",
         )
-        try:
-            _ja_default = datetime.strptime(selected.get("joined_at") or "", DATE_FMT_YM).date() if selected else date.today()
-        except ValueError:
-            _ja_default = date.today()
-        _ja_date = st.date_input("入会月", value=_ja_default)
-        joined_at = _ja_date.strftime(DATE_FMT_YM)
+        _ja_default = _parse_joined_at(selected.get("joined_at") or "") if selected else date.today()
+        _ja_date = st.date_input("入会日", value=_ja_default)
+        joined_at = _ja_date.strftime(DATE_FMT_YMD)
         left_at = st.text_input(
             "在籍有効期限（YYYY/MM）",
             value=selected.get("left_at") or "" if selected else "",
@@ -213,6 +242,10 @@ if mode == "新規追加" or selected:
                 "name": display_name,
                 "cw_account": cw_account,
             }
+            st.session_state["new_ticket_for"] = {
+                "id": new_id,
+                "name": display_name,
+            }
             st.session_state["cw_fetched_account_id"] = ""
         else:
             sb.table("users_master").update(user_data).eq("id", selected["id"]).execute()
@@ -265,6 +298,65 @@ if new_member:
         if st.button("送信せずに閉じる", key="close_msg"):
             st.session_state["new_member_saved"] = None
             st.rerun()
+
+    # ── コーチングチケット同時登録 ────────────────────────────────
+    new_ticket = st.session_state.get("new_ticket_for")
+    if new_ticket:
+        st.divider()
+        st.subheader(f"コーチングチケットを登録（任意） — {new_ticket['name']}")
+
+        _coaches_raw = sb.table("m_status").select("label").eq("category", M_STATUS_CAT_COACH).order("code").execute().data
+        _coach_list  = [c["label"] for c in _coaches_raw]
+        _type_list   = [t for t in COACHING_TYPE_DEFAULTS if t != "追加コーチング"]
+
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            t_type = st.selectbox("コーチング種別", _type_list, key="nt_type")
+        with col_t2:
+            t_coach = st.selectbox("担当コーチ", _coach_list, key="nt_coach")
+
+        _defaults    = COACHING_TYPE_DEFAULTS.get(t_type, {})
+        _max_sess    = _defaults.get("max_sessions", 0)
+        _dur_months  = _defaults.get("duration_months", 0)
+
+        col_t3, col_t4, col_t5 = st.columns(3)
+        with col_t3:
+            t_start = st.date_input("開始日", value=date.today(), key="nt_start")
+        with col_t4:
+            t_max_sess = st.number_input("最大セッション数", value=_max_sess, min_value=0, key="nt_max")
+        with col_t5:
+            t_dur = st.number_input("期間（月）", value=_dur_months, min_value=0, key="nt_dur")
+
+        # 有効期限の自動計算
+        if t_dur > 0:
+            _exp = (t_start + relativedelta(months=t_dur)).strftime(DATE_FMT_YMD)
+        else:
+            _exp = "2099/12/31"
+        st.caption(f"有効期限: {_exp}")
+
+        col_btn1, col_btn2 = st.columns([1, 3])
+        with col_btn1:
+            if st.button("チケットを登録", type="primary", key="nt_save"):
+                sb.table("coaching_tickets").insert({
+                    "id":              str(uuid.uuid4()),
+                    "user_id":         new_ticket["id"],
+                    "name":            new_ticket["name"],
+                    "coaching_type":   t_type,
+                    "coach_name":      t_coach,
+                    "start_date":      t_start.strftime(DATE_FMT_YMD),
+                    "term_count":      1,
+                    "max_sessions":    int(t_max_sess),
+                    "duration_months": int(t_dur),
+                    "expired_at":      _exp,
+                    "is_active":       1,
+                }).execute()
+                st.success(f"✓ コーチングチケットを登録しました（{t_type} / {t_coach}）")
+                st.session_state["new_ticket_for"] = None
+                st.rerun()
+        with col_btn2:
+            if st.button("登録しない", key="nt_skip"):
+                st.session_state["new_ticket_for"] = None
+                st.rerun()
 
     # 送信履歴
     st.divider()
