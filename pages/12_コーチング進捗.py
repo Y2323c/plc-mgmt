@@ -81,6 +81,17 @@ def _ym(date_str: str | None) -> str:
     return date_str[:7].replace("/", "-")
 
 
+# ── コーチ選択（全タブに反映）────────────────────────
+param_coach   = st.query_params.get("coach")
+coach_options = [ALL_COACHES] + COACH_LIST
+_default_idx  = coach_options.index(param_coach) if param_coach in coach_options else 0
+selected_coach = st.selectbox(
+    "コーチを選択（全タブに反映）",
+    coach_options,
+    index=_default_idx,
+    key="coach_filter",
+)
+
 # ── タブ ────────────────────────────────────────────
 tab_coach, tab_progress, tab_memos, tab_history = st.tabs([
     "📈 コーチ別サマリー", "📊 進捗", "💬 メモ", "📋 実施履歴"
@@ -90,19 +101,6 @@ tab_coach, tab_progress, tab_memos, tab_history = st.tabs([
 # 📈 コーチ別サマリー（第1タブ）
 # ===================================================
 with tab_coach:
-    # URLパラメータがあれば初期値に使う
-    param_coach = st.query_params.get("coach")
-    coach_options = [ALL_COACHES] + COACH_LIST
-    _default_idx = coach_options.index(param_coach) if param_coach in coach_options else 0
-
-    selected_coach = st.selectbox(
-        "コーチを選択（他タブに反映されます）",
-        coach_options,
-        index=_default_idx,
-        key="coach_filter",
-    )
-
-
     session_logs_all = [l for l in all_logs if l.get("log_type") == LOG_TYPE_SESSION]
 
     # コーチ別集計（常に全コーチ表示）

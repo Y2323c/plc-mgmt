@@ -11,7 +11,7 @@ from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO,
 
 COACHING_CW_TOKEN = get_secret("CHATWORK_COACHING_API_TOKEN")
 
-st.title("コーチング記録")
+st.title("コーチング入力")
 st.page_link("pages/12_コーチング進捗.py", label="📈 進捗確認ページへ", icon=None)
 
 # トースト表示（保存・送信完了メッセージ）
@@ -120,14 +120,23 @@ logs = (
     .data
 )
 session_count_total = sum(1 for l in logs if l.get("log_type") == LOG_TYPE_SESSION)
-next_session = session_count_total + 1
+next_session        = session_count_total + 1
+max_sessions        = selected_ticket.get("max_sessions") or 0
+last_session_date   = next(
+    (l["session_date"] for l in reversed(logs) if l.get("log_type") == LOG_TYPE_SESSION), None
+)
 
 # 上限チェック
-max_sessions = selected_ticket.get("max_sessions") or 0
 if max_sessions > 0 and session_count_total >= max_sessions:
     st.warning(f"このチケットの全セッション（{max_sessions}回）が完了しています。セッションを追加できません。")
     st.stop()
 
+# サマリー
+st.divider()
+_col1, _col2, _col3 = st.columns(3)
+_col1.metric("セッション回数", f"{session_count_total} / {max_sessions}" if max_sessions else str(session_count_total))
+_col2.metric("残り回数", (max_sessions - session_count_total) if max_sessions else "—")
+_col3.metric("最終セッション日", last_session_date or "—")
 st.divider()
 
 # --- タブ ---
