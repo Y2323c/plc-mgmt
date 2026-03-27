@@ -7,7 +7,9 @@ import pandas as pd
 from datetime import date, datetime
 
 from utils.supabase_client import get_client
-from utils.constants import LOG_TYPE_SESSION, M_STATUS_CAT_COACH
+from utils.chatwork import send_message
+from utils.secrets import get_secret
+from utils.constants import LOG_TYPE_SESSION, M_STATUS_CAT_COACH, COACHING_COMPLETION_ROOM_ID
 from utils.style import apply_style
 
 apply_style()
@@ -58,7 +60,6 @@ def _status_label(elapsed: int, reminder_day: int, session_done: bool) -> str:
 def _sort_key(label: str) -> int:
     """ソート用: 超過 → 今日 → 近い順 → 消化済み"""
     if "超過" in label:
-        # 超過日数を負値として扱う（-1 が最も緊急）
         n = int(label.replace("⚠️ ", "").split("日")[0])
         return -n
     if "今日" in label:
@@ -66,21 +67,64 @@ def _sort_key(label: str) -> int:
     if "あと" in label:
         n = int(label.replace("📅 あと", "").replace("日", ""))
         return n
-    return 9999  # 消化済みは最後
+    return 9999
+
+
+def _build_message(coaching_type: str, months: int, session_num: int,
+                   member_name: str, coach_name: str) -> str:
+    base = f"TO {coach_name}\nTO {member_name}\n"
+    if coaching_type == "新規コーチング":
+        return (
+            base
+            + f"あと10日で入会{months}ヶ月を迎えます。\n"
+            + f"{session_num}回目のコーチングの日時の調整をお願いいたします。"
+        )
+    else:
+        return (
+            base
+            + f"あと10日で継続{months}ヶ月を迎えます。\n"
+            + f"{session_num}回目のコーチングの日時の調整をお願いいたします。\n"
+            + "ローンチの状況に合わせて、2ヶ月以内を目安にコーチングを行なってください。"
+        )
 
 
 # ── データ取得 ───────────────────────────────────────────────────────────
 st.title("コーチングリマインド確認")
 
-sb = get_client()
+sb    = get_client()
 today = date.today()
 
-# コーチ一覧
+# ── 自動送信ステータス ────────────────────────────────────────────────────
+skip_row = (
+    sb.table("reminder_skip_dates")
+    .select("skip_date")
+    .eq("skip_date", str(today))
+    .maybe_single()
+    .execute()
+    .data
+)
+
+with st.container(border=True):
+    if skip_row:
+        st.warning(f"⏸ 今日（{today.strftime('%Y/%m/%d')}）の自動送信はキャンセル済みです")
+        if st.button("キャンセルを取り消す（自動送信を再開）"):
+            sb.table("reminder_skip_dates").delete().eq("skip_date", str(today)).execute()
+            st.rerun()
+    else:
+        st.info(f"▶️ 今日（{today.strftime('%Y/%m/%d')}）の自動送信：予定あり（9:00）")
+        if st.button("今日の自動送信をキャンセル"):
+            sb.table("reminder_skip_dates").insert({"skip_date": str(today)}).execute()
+            st.rerun()
+
+st.divider()
+
+# コーチ一覧（room_id も取得）
 coaches_raw = (
-    sb.table("m_status").select("label")
+    sb.table("m_status").select("label,room_id")
     .eq("category", M_STATUS_CAT_COACH).order("code").execute().data
 )
 all_coaches = [c["label"] for c in coaches_raw]
+coach_rooms = {c["label"]: c.get("room_id") for c in coaches_raw}
 
 # フィルター
 col_f1, col_f2 = st.columns([2, 3])
@@ -120,7 +164,6 @@ if ticket_ids:
         .eq("log_type", LOG_TYPE_SESSION)
         .execute().data
     )
-# ticket_id → 消化済みセッション番号セット
 done_map: dict[str, set] = {}
 for log in all_logs:
     tid = log["ticket_id"]
@@ -139,7 +182,6 @@ for ticket in tickets:
     if coach_filter != "全コーチ" and coach_name != coach_filter:
         continue
 
-    # 基準日
     if coaching_type == "新規コーチング":
         ref_str = user_cache.get(ticket["user_id"])
     else:
@@ -170,6 +212,7 @@ for ticket in tickets:
 
         rows.append({
             "_sort":        _sort_key(status) if elapsed is not None else 9998,
+            "_months":      months,
             "名前":         member_name,
             "コーチ":       coach_name,
             "種別":         coaching_type,
@@ -202,12 +245,48 @@ st.caption(f"基準日: 本日 {today.strftime('%Y/%m/%d')} / 対象チケット
 if not rows:
     st.info("表示対象のリマインドはありません。")
 else:
-    df = pd.DataFrame([{k: v for k, v in r.items() if k != "_sort"} for r in rows])
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    display_cols = ["名前", "コーチ", "種別", "基準日", "経過日数", "対象回", "リマインド日", "状況"]
+    df = pd.DataFrame([{k: r[k] for k in display_cols} for r in rows])
+
+    event = st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        selection_mode="multi-row",
+        on_select="rerun",
+        key="reminder_table",
+    )
+    selected_idx = event.selection.rows
+
+    # 選択送信 UI
+    if selected_idx:
+        st.caption(f"{len(selected_idx)} 件選択中")
+        if st.button(f"選択した {len(selected_idx)} 件に送信"):
+            token = get_secret("CHATWORK_COACHING_API_TOKEN")
+            results = []
+            for i in selected_idx:
+                r           = rows[i]
+                coach_name  = r["コーチ"]
+                member_name = r["名前"]
+                coaching_type = r["種別"]
+                session_num = int(r["対象回"].replace("回目", ""))
+                months      = r["_months"]
+                room_id     = coach_rooms.get(coach_name)
+                if not room_id:
+                    results.append(f"❌ {member_name}（{coach_name}：room_id 未設定）")
+                    continue
+                msg = _build_message(coaching_type, months, session_num, member_name, coach_name)
+                ok  = send_message(str(room_id), msg, token=token or None)
+                results.append(
+                    f"{'✅' if ok else '❌'} {member_name}（{coach_name}）{session_num}回目"
+                )
+            for line in results:
+                st.write(line)
+    else:
+        st.caption("行を選択すると「選択した件数に送信」ボタンが表示されます")
 
     # サマリー
     st.divider()
-    total     = len(rows)
     overdue   = sum(1 for r in rows if "超過" in r["状況"])
     today_cnt = sum(1 for r in rows if "今日" in r["状況"])
     upcoming  = sum(1 for r in rows if "あと" in r["状況"])

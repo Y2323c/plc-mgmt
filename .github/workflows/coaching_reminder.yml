@@ -1,0 +1,36 @@
+name: コーチングリマインド
+
+on:
+  schedule:
+    - cron: '0 23 * * *'  # JST 8:00（前日確認通知）
+    - cron: '0 0 * * *'   # JST 9:00（本番送信）
+  workflow_dispatch:       # 手動実行ボタン
+
+env:
+  TZ: Asia/Tokyo           # date.today() を JST に合わせる
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run reminder
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          CHATWORK_COACHING_API_TOKEN: ${{ secrets.CHATWORK_COACHING_API_TOKEN }}
+        run: |
+          if [ "${{ github.event.schedule }}" = "0 23 * * *" ]; then
+            python3 scripts/coaching_reminder.py --preview
+          else
+            python3 scripts/coaching_reminder.py
+          fi
