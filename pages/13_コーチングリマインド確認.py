@@ -313,11 +313,14 @@ else:
         else:
             st.info("変更はありませんでした")
 
-    # 今すぐ手動送信ボタン
+    # 手動送信セクション
+    st.divider()
     sendable = [r for r in rows if not r["スキップ"] and ("今日" in r["状況"] or "超過" in r["状況"])]
     if sendable:
-        label = f"今すぐ手動送信（スキップなし・{len(sendable)}件）"
-        if col_b2.button(label, use_container_width=True):
+        st.markdown("**📤 今日のリマインド送信対象**（スキップにチェックした人は除外済み）")
+        for r in sendable:
+            st.markdown(f"- {r['名前']}（{r['コーチ']}コーチ）｜{r['種別']} {r['_session_num']}回目 {r['状況']}")
+        if st.button(f"リマインドを今すぐ送信（{len(sendable)}件）", type="primary"):
             token = get_secret("CHATWORK_COACHING_API_TOKEN")
             results = []
             for r in sendable:
@@ -328,7 +331,7 @@ else:
                 msg = _build_message(r["種別"], r["_months"], r["_session_num"],
                                      r["名前"], r["コーチ"])
                 ok  = send_message(str(room_id), msg, token=token or None)
-                results.append(f"{'✅' if ok else '❌'} {r['名前']}（{r['コーチ']}）{r['_session_num']}回目")
+                results.append(f"{'✅' if ok else '❌'} {r['名前']}（{r['コーチ']}コーチ）{r['_session_num']}回目")
                 # 送信成功した行をスキップ登録（18:00の自動送信で二重送信しない）
                 if ok and r["_remind_date_raw"] is not None:
                     sb.table("reminder_skip_targets").upsert({
@@ -336,8 +339,11 @@ else:
                         "ticket_id":   r["_ticket_id"],
                         "session_num": r["_session_num"],
                     }).execute()
+            st.write("---")
             for line in results:
                 st.write(line)
+    else:
+        st.caption("今日の送信対象はありません（全員スキップ済みか、対象なし）")
 
     # サマリー
     st.divider()
