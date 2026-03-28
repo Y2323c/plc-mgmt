@@ -308,10 +308,10 @@ else:
                  .execute())
             changed += 1
         if changed:
-            st.success(f"スキップ設定を保存しました（{changed}件）")
+            st.toast(f"スキップを保存しました（{changed}件）", icon="✅")
             st.rerun()
         else:
-            st.info("変更はありませんでした")
+            st.toast("変更はありませんでした", icon="ℹ️")
 
     # 手動送信セクション
     st.divider()
