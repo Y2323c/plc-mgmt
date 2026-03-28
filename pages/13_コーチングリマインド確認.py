@@ -329,6 +329,13 @@ else:
                                      r["名前"], r["コーチ"])
                 ok  = send_message(str(room_id), msg, token=token or None)
                 results.append(f"{'✅' if ok else '❌'} {r['名前']}（{r['コーチ']}）{r['_session_num']}回目")
+                # 送信成功した行をスキップ登録（18:00の自動送信で二重送信しない）
+                if ok and r["_remind_date_raw"] is not None:
+                    sb.table("reminder_skip_targets").upsert({
+                        "skip_date":   str(r["_remind_date_raw"]),
+                        "ticket_id":   r["_ticket_id"],
+                        "session_num": r["_session_num"],
+                    }).execute()
             for line in results:
                 st.write(line)
 
