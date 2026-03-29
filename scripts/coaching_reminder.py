@@ -109,6 +109,10 @@ def _collect_targets(sb, check_date: date) -> list[dict]:
         ticket_id     = ticket["id"]
         member_name   = ticket.get("name", "")
 
+        # send_reminder=False のチケットはリマインド送信をスキップ
+        if not ticket.get("send_reminder", True):
+            continue
+
         if coaching_type == "新規コーチング":
             if user_id not in user_cache:
                 u = (
@@ -256,6 +260,11 @@ def run():
         coach_name    = ticket.get("coach_name", "")
         ticket_id     = ticket["id"]
         member_name   = ticket.get("name", "")
+
+        # send_reminder=False のチケットはリマインド送信をスキップ
+        if not ticket.get("send_reminder", True):
+            print(f"  ✓ {member_name}: リマインド無効（旧制度）。スキップ。")
+            continue
 
         # 基準日を取得
         if coaching_type == "新規コーチング":

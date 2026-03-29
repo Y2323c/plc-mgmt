@@ -102,6 +102,11 @@ def render_ticket_form(form_key: str, selected_ticket: dict | None, next_term: i
                 "有効（is_active）",
                 value=bool(selected_ticket["is_active"]) if selected_ticket else True
             )
+            send_reminder = st.checkbox(
+                "リマインド送信する",
+                value=bool(selected_ticket.get("send_reminder", True)) if selected_ticket else True,
+                help="OFFにすると月次レポートには表示されますが、日次リマインドは送信されません（制度変更前の会員など）"
+            )
 
         submitted = st.form_submit_button("保存")
 
@@ -127,6 +132,7 @@ def render_ticket_form(form_key: str, selected_ticket: dict | None, next_term: i
             "duration_months": duration_months or None,
             "expired_at": expired_at,
             "is_active": 1 if is_active else 0,
+            "send_reminder": send_reminder,
         }
         if is_new:
             data["id"] = str(uuid.uuid4())
