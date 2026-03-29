@@ -167,24 +167,27 @@ def run_preview(sb, today: date, token: str):
     targets  = _collect_targets(sb, tomorrow)
 
     if not targets:
-        print(f"[{today}] 明日のリマインド対象なし。通知をスキップ。")
-        return
-
-    lines = [
-        f"【明日のコーチングリマインド予定】{tomorrow.strftime('%Y/%m/%d')}",
-        "",
-        f"以下の方へ明日リマインドを送信します（計{len(targets)}件）：",
-        "",
-    ]
-    for t in targets:
-        lines.append(
-            f"・ {t['member_name']}（担当：{t['coach_name']}コーチ）"
-            f"｜{t['coaching_type']} {t['session_num']}回目"
-        )
-    lines += [
-        "",
-        "問題がある場合は送信前に Streamlit の「コーチングリマインド確認」ページで対応してください。",
-    ]
+        lines = [
+            f"【明日のコーチングリマインド予定】{tomorrow.strftime('%Y/%m/%d')}",
+            "",
+            "明日のリマインド対象者はいません。",
+        ]
+    else:
+        lines = [
+            f"【明日のコーチングリマインド予定】{tomorrow.strftime('%Y/%m/%d')}",
+            "",
+            f"以下の方へ明日リマインドを送信します（計{len(targets)}件）：",
+            "",
+        ]
+        for t in targets:
+            lines.append(
+                f"・ {t['member_name']}（担当：{t['coach_name']}コーチ）"
+                f"｜{t['coaching_type']} {t['session_num']}回目"
+            )
+        lines += [
+            "",
+            "問題がある場合は送信前に Streamlit の「コーチングリマインド確認」ページで対応してください。",
+        ]
 
     msg = "\n".join(lines)
     ok  = send_message(COACHING_COMPLETION_ROOM_ID, msg, token=token or None)
