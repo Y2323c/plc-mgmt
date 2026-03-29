@@ -1,0 +1,29 @@
+name: コーチング月次レポート
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'   # 毎月1日 00:00 UTC = JST 09:00
+  workflow_dispatch:        # 手動実行（テスト用）
+
+env:
+  TZ: Asia/Tokyo
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: actions/setup-python@v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run monthly report
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          CHATWORK_COACHING_API_TOKEN: ${{ secrets.CHATWORK_COACHING_API_TOKEN }}
+        run: python3 scripts/monthly_report.py
