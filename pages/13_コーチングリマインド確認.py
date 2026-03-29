@@ -316,7 +316,7 @@ else:
 
     # 手動送信セクション
     st.divider()
-    sendable = [r for r in rows if not r["スキップ"] and ("今日" in r["状況"] or "超過" in r["状況"])]
+    sendable = [r for r in rows if not r["スキップ"] and "今日" in r["状況"]]
     if sendable:
         st.markdown("**📤 今日のリマインド送信対象**（スキップにチェックした人は除外済み）")
         for r in sendable:
