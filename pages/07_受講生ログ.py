@@ -33,6 +33,9 @@ col2.metric("在籍状況", status_label)
 col3.metric("入会月", selected.get("joined_at") or "—")
 col4.metric("活動区分", selected.get("activity_type") or "—")
 
+if selected.get("note"):
+    st.info(f"📝 備考：{selected['note']}")
+
 st.divider()
 
 # --- タブ ---
