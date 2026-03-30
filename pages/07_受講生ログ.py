@@ -34,13 +34,13 @@ col3.metric("入会月", selected.get("joined_at") or "—")
 col4.metric("活動区分", selected.get("activity_type") or "—")
 
 if selected.get("note"):
-    st.info(f"📝 備考：{selected['note']}")
+    st.markdown(f"📝 **備考：** {selected['note']}")
 
 st.divider()
 
 # --- タブ ---
 tab_event, tab_consult, tab_ticket, tab_coaching = st.tabs([
-    "WS・チーム参加", "コンサル", "コーチングチケット", "コーチング記録"
+    "WS・チーム参加", "コンサル", "コーチングチケット", "コーチング履歴・備考"
 ])
 
 # ================================================
