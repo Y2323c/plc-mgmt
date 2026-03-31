@@ -4,10 +4,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import streamlit as st
 import pandas as pd
 from utils.supabase_client import get_client, get_members, get_events, upsert_event_log
-from utils.constants import ST_PLAN_IN, ST_PLAN_OUT, CAT_WS
+from utils.constants import ST_ATTENDED, ST_ABSENT, CAT_WS
 
 st.title("イベントCSV取込")
-st.caption("Google Formの回答CSVからWSの出欠を取り込みます。懇親会データは対象外です。")
+st.caption("Google Formの回答CSVからWSの出欠実績を取り込みます。懇親会データは対象外です。")
 
 # --- Step 1: イベント選択 ---
 events = get_events()
@@ -67,13 +67,13 @@ def _parse_ws(val: str):
     """WS列の値を (status, note) に変換"""
     v = str(val).strip()
     if "キャンセル" in v:
-        return ST_PLAN_OUT, "キャンセル"
+        return ST_ABSENT, "キャンセル"
     if "リアル" in v:
-        return ST_PLAN_IN, "リアル"
+        return ST_ATTENDED, "リアル"
     if "オンライン" in v:
-        return ST_PLAN_IN, "オンライン"
+        return ST_ATTENDED, "オンライン"
     if "欠席" in v:
-        return ST_PLAN_OUT, None
+        return ST_ABSENT, None
     return None, None  # その他・空白
 
 
@@ -114,7 +114,7 @@ if matched:
             "会員名":        e["member"]["display_name"],
             "照合":          e["match_type"],
             "WS出欠":        e["ws_val"],
-            "取込ステータス": "参加予定" if e["status"] == ST_PLAN_IN else "欠席予定" if e["status"] == ST_PLAN_OUT else "⚠️ 不明",
+            "取込ステータス": "出席" if e["status"] == ST_ATTENDED else "欠席" if e["status"] == ST_ABSENT else "⚠️ 不明",
             "備考":          e["note_str"] or "",
         } for e in matched],
         use_container_width=True,
