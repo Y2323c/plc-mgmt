@@ -5,8 +5,8 @@ from collections import defaultdict
 from datetime import date
 import streamlit as st
 import pandas as pd
-from utils.supabase_client import get_client
-from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO, PUBLIC_APP_BASE_URL
+from utils.supabase_client import get_client, get_coaches
+from utils.constants import LOG_TYPE_SESSION, LOG_TYPE_MEMO, PUBLIC_APP_BASE_URL
 
 st.title("コーチング進捗")
 if "streamlit.app" in st.context.headers.get("host", ""):
@@ -15,22 +15,13 @@ if "streamlit.app" in st.context.headers.get("host", ""):
 sb = get_client()
 
 # ── コーチ一覧 ──────────────────────────────────────
-_coaches_raw = (
-    sb.table("m_status")
-    .select("label")
-    .eq("category", M_STATUS_CAT_COACH)
-    .order("code")
-    .execute()
-    .data
-)
-COACH_LIST = [c["label"] for c in _coaches_raw if c["label"] != ".準備中"]
+COACH_LIST = [c["label"] for c in get_coaches() if c["label"] != ".準備中"]
 ALL_COACHES = "（全コーチ）"
 
 # ── 全データ一括取得 ────────────────────────────────
 all_tickets = (
     sb.table("coaching_tickets")
     .select("*")
-    .eq("is_active", 1)
     .order("coach_name")
     .execute()
     .data
@@ -214,6 +205,7 @@ with tab_progress:
             "コーチ":           t.get("coach_name") or "",
             "名前":             uid_to_name.get(t["user_id"], ""),
             "種別":             t.get("coaching_type") or "",
+            "有効":             "✅" if t.get("is_active") == 1 else "終了",
             "累計回数":         f"{session_count} / {max_sessions}" if max_sessions else str(session_count),
             "残り回数":         (max_sessions - session_count) if max_sessions else "—",
             "最終セッション日": last_date or "—",
