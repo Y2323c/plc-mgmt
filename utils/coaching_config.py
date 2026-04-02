@@ -1,0 +1,35 @@
+# ── リマインドスケジュール ────────────────────────────────────────────────
+# day    : 基準日からの経過日数（この日に送信）
+# months : メッセージ内の「〇ヶ月」
+# session: まだ実施されていないと判定するセッション番号
+
+REMINDERS = {
+    "新規コーチング": [
+        {"day": 140, "months": 5,  "session": 5},
+        {"day": 230, "months": 8,  "session": 6},
+        {"day": 320, "months": 11, "session": 7},
+    ],
+    "継続コーチング": [
+        {"day":  80, "months": 3, "session": 1},
+        {"day": 230, "months": 8, "session": 2},
+    ],
+}
+
+
+def build_reminder_message(coaching_type: str, months: int, session_num: int,
+                           member_name: str, coach_name: str) -> str:
+    """リマインドメッセージ本文を生成する。"""
+    base = f"TO {coach_name}\nTO {member_name}\n"
+    if coaching_type == "新規コーチング":
+        return (
+            base
+            + f"あと10日で入会{months}ヶ月を迎えます。\n"
+            + f"{session_num}回目のコーチングの日時の調整をお願いいたします。"
+        )
+    else:  # 継続コーチング
+        return (
+            base
+            + f"あと10日で継続{months}ヶ月を迎えます。\n"
+            + f"{session_num}回目のコーチングの日時の調整をお願いいたします。\n"
+            + "ローンチの状況に合わせて、2ヶ月以内を目安にコーチングを行なってください。"
+        )
