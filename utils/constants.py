@@ -31,7 +31,8 @@ LOG_TYPE_MEMO    = "memo"
 COACHING_TYPE_DEFAULTS = {
     "新規コーチング": {"max_sessions": 7, "duration_months": 11},
     "継続コーチング": {"max_sessions": 2, "duration_months": 12},
-    "追加コーチング": {"max_sessions": 0, "duration_months": 0},
+    "追加コーチング": {"max_sessions": 4, "duration_months": 0},
+    "救済コーチング": {"max_sessions": 2, "duration_months": 0},
 }
 
 # ── 選択肢リスト ──
@@ -55,6 +56,9 @@ SURVEY_LABELS  = {ST_PLAN_IN: "参加予定", ST_PLAN_OUT: "欠席予定", ST_NO
 # ── 日付フォーマット ──
 DATE_FMT_YM  = "%Y/%m"
 DATE_FMT_YMD = "%Y/%m/%d"
+
+# ── メッセージテンプレート ──
+DEFAULT_WELCOME_TEMPLATE = "こんにちは。"
 
 # ── Chatwork API ──
 CHATWORK_API_BASE = "https://api.chatwork.com/v2"

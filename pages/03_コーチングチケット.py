@@ -6,9 +6,9 @@ import streamlit as st
 import pandas as pd
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
-from utils.supabase_client import get_client, get_next_term_count, insert_record
+from utils.supabase_client import get_client, get_next_term_count, insert_record, get_coaches
 from utils.ui_helpers import member_selectbox
-from utils.constants import DATE_FMT_YMD, M_STATUS_CAT_COACH, M_STATUS_CAT_COACHING_TYPE, COACHING_TYPE_DEFAULTS
+from utils.constants import DATE_FMT_YMD, M_STATUS_CAT_COACHING_TYPE, COACHING_TYPE_DEFAULTS
 
 st.title("コーチングチケット")
 
@@ -18,8 +18,7 @@ if "_toast" in st.session_state:
 sb = get_client()
 
 # --- コーチ一覧取得 ---
-_coaches_raw = sb.table("m_status").select("label").eq("category", M_STATUS_CAT_COACH).order("code").execute().data
-COACH_LIST = [c["label"] for c in _coaches_raw]
+COACH_LIST = [c["label"] for c in get_coaches()]
 
 # --- コーチング種別取得 ---
 _types_raw = sb.table("m_status").select("label").eq("category", M_STATUS_CAT_COACHING_TYPE).order("code").execute().data
@@ -102,10 +101,16 @@ def render_ticket_form(form_key: str, selected_ticket: dict | None, next_term: i
                 "有効（is_active）",
                 value=bool(selected_ticket["is_active"]) if selected_ticket else True
             )
+            _no_reminder_types = {"追加コーチング", "救済コーチング"}
+            _reminder_default = (
+                bool(selected_ticket.get("send_reminder", True))
+                if selected_ticket
+                else coaching_type not in _no_reminder_types
+            )
             send_reminder = st.checkbox(
                 "リマインド送信する",
-                value=bool(selected_ticket.get("send_reminder", True)) if selected_ticket else True,
-                help="OFFにすると月次レポートには表示されますが、日次リマインドは送信されません（制度変更前の会員など）"
+                value=_reminder_default,
+                help="OFFにすると月次レポートには表示されますが、日次リマインドは送信されません"
             )
 
         submitted = st.form_submit_button("保存")

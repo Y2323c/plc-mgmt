@@ -13,7 +13,6 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import re
 from datetime import date, datetime, timedelta
 from collections import defaultdict
 
@@ -21,36 +20,10 @@ from utils.supabase_client import get_client
 from utils.chatwork import send_message
 from utils.secrets import get_secret
 from utils.constants import LOG_TYPE_SESSION, COACHING_COMPLETION_ROOM_ID
-
-# coaching_reminder.py と同一定義
-REMINDERS = {
-    "新規コーチング": [
-        {"day": 140, "months": 5,  "session": 5},
-        {"day": 230, "months": 8,  "session": 6},
-        {"day": 320, "months": 11, "session": 7},
-    ],
-    "継続コーチング": [
-        {"day":  80, "months": 3, "session": 1},
-        {"day": 230, "months": 8, "session": 2},
-    ],
-}
+from utils.date_helpers import parse_date
+from utils.coaching_config import REMINDERS
 
 
-def _parse_date(val: str) -> date | None:
-    if not val:
-        return None
-    for fmt in ("%Y/%m/%d", "%Y/%m"):
-        try:
-            return datetime.strptime(val, fmt).date()
-        except ValueError:
-            pass
-    m = re.match(r"(\d{4})年(\d{1,2})月(\d{1,2})日", val)
-    if m:
-        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-    m = re.match(r"(\d{4})年(\d{1,2})月", val)
-    if m:
-        return date(int(m.group(1)), int(m.group(2)), 1)
-    return None
 
 
 def _section_prev_month(sb, today: date) -> str:
@@ -71,7 +44,7 @@ def _section_prev_month(sb, today: date) -> str:
     prev_logs = [
         l for l in logs
         if l.get("session_date")
-        and (d := _parse_date(l["session_date"])) is not None
+        and (d := parse_date(l["session_date"])) is not None
         and d.year == prev_year
         and d.month == prev_month
     ]
@@ -96,7 +69,7 @@ def _section_prev_month(sb, today: date) -> str:
     for l in sorted(prev_logs, key=lambda x: x.get("session_date", "")):
         coach      = l.get("coach_name") or "（未設定）"
         member     = ticket_name_map.get(l["ticket_id"], "（不明）")
-        session_d  = _parse_date(l["session_date"])
+        session_d  = parse_date(l["session_date"])
         date_str   = session_d.strftime("%Y/%m/%d") if session_d else "—"
         num        = l.get("session_count")
         num_str    = f"{num}回目" if num is not None else "—"
@@ -146,7 +119,7 @@ def _section_upcoming(sb, today: date) -> str:
         else:
             ref_str = ticket.get("start_date")
 
-        ref_date = _parse_date(ref_str or "")
+        ref_date = parse_date(ref_str or "")
         if not ref_date:
             continue
 
@@ -164,7 +137,7 @@ def _section_upcoming(sb, today: date) -> str:
             l["session_count"] for l in logs
             if l.get("session_count") is not None
         }
-        dates = [_parse_date(l["session_date"]) for l in logs if l.get("session_date")]
+        dates = [parse_date(l["session_date"]) for l in logs if l.get("session_date")]
         last_date = max((d for d in dates if d), default=None)
         last_str  = last_date.strftime("%Y/%m/%d") if last_date else "—"
 
@@ -208,17 +181,17 @@ def _section_upcoming(sb, today: date) -> str:
 
 
 def _section_rescue(sb) -> str:
-    """セクション③: 追加コーチング（救済対象者）"""
+    """セクション③: 救済コーチング（救済対象者）"""
     tickets = (
         sb.table("coaching_tickets")
         .select("id, name, coach_name, start_date")
         .eq("is_active", 1)
-        .eq("coaching_type", "追加コーチング")
+        .eq("coaching_type", "救済コーチング")
         .execute()
         .data
     )
 
-    title = "■ 追加コーチング（救済対象者）"
+    title = "■ 救済コーチング（救済対象者）"
     if not tickets:
         return title + "\n救済対象者はいません。✅"
 
@@ -227,7 +200,7 @@ def _section_rescue(sb) -> str:
         ticket_id   = ticket["id"]
         member_name = ticket.get("name") or "（不明）"
         coach_name  = ticket.get("coach_name") or "（未設定）"
-        start_date  = _parse_date(ticket.get("start_date", ""))
+        start_date  = parse_date(ticket.get("start_date", ""))
         start_disp  = start_date.strftime("%Y/%m/%d") if start_date else "—"
 
         logs = (
@@ -239,7 +212,56 @@ def _section_rescue(sb) -> str:
             .data
         )
         total = len(logs)
-        dates = [_parse_date(l["session_date"]) for l in logs if l.get("session_date")]
+        dates = [parse_date(l["session_date"]) for l in logs if l.get("session_date")]
+        last_date = max((d for d in dates if d), default=None)
+        last_str  = last_date.strftime("%Y/%m/%d") if last_date else "—"
+
+        by_coach[coach_name].append(
+            f"・ {member_name} | 開始：{start_disp} | 計{total}回 | 最終：{last_str}"
+        )
+
+    total_count = sum(len(v) for v in by_coach.values())
+    lines = [title + f"（{total_count}件）", ""]
+    for coach, entries in sorted(by_coach.items()):
+        lines.append(f"▼ {coach}")
+        lines.extend(entries)
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def _section_add_coaching(sb) -> str:
+    """セクション④: 追加コーチング（有料）"""
+    tickets = (
+        sb.table("coaching_tickets")
+        .select("id, name, coach_name, start_date")
+        .eq("is_active", 1)
+        .eq("coaching_type", "追加コーチング")
+        .execute()
+        .data
+    )
+
+    title = "■ 追加コーチング（有料）"
+    if not tickets:
+        return title + "\n対象者はいません。✅"
+
+    by_coach: dict[str, list[str]] = defaultdict(list)
+    for ticket in tickets:
+        ticket_id   = ticket["id"]
+        member_name = ticket.get("name") or "（不明）"
+        coach_name  = ticket.get("coach_name") or "（未設定）"
+        start_date  = parse_date(ticket.get("start_date", ""))
+        start_disp  = start_date.strftime("%Y/%m/%d") if start_date else "—"
+
+        logs = (
+            sb.table("coaching_logs")
+            .select("session_date")
+            .eq("ticket_id", ticket_id)
+            .eq("log_type", LOG_TYPE_SESSION)
+            .execute()
+            .data
+        )
+        total = len(logs)
+        dates = [parse_date(l["session_date"]) for l in logs if l.get("session_date")]
         last_date = max((d for d in dates if d), default=None)
         last_str  = last_date.strftime("%Y/%m/%d") if last_date else "—"
 
@@ -263,17 +285,21 @@ def run():
 
     print(f"[{today}] 月次コーチングレポート生成開始")
 
-    s1 = _section_prev_month(sb, today)
-    s2 = _section_upcoming(sb, today)
-    s3 = _section_rescue(sb)
+    sections = []
+    for label, func, args in [
+        ("前月実施状況", _section_prev_month, (sb, today)),
+        ("今後のリマインド", _section_upcoming, (sb, today)),
+        ("救済コーチング", _section_rescue, (sb,)),
+        ("追加コーチング", _section_add_coaching, (sb,)),
+    ]:
+        try:
+            sections.append(func(*args))
+        except Exception as e:
+            print(f"  ⚠ {label}セクション生成エラー: {e}")
+            sections.append(f"（{label}: 取得エラー）")
 
     year_month = f"{today.year}年{today.month}月"
-    msg = "\n\n".join([
-        f"【コーチング月次レポート】{year_month}",
-        s1,
-        s2,
-        s3,
-    ])
+    msg = "\n\n".join([f"【コーチング月次レポート】{year_month}"] + sections)
 
     ok = send_message(COACHING_COMPLETION_ROOM_ID, msg, token=token or None)
     status = "✅ 送信完了" if ok else "❌ 送信失敗"

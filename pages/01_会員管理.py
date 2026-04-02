@@ -1,43 +1,18 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import re
 import uuid
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime
-from utils.supabase_client import get_client, get_members, get_m_status, insert_record
+from utils.supabase_client import get_client, get_members, get_m_status, insert_record, get_coaches
 from utils.chatwork import find_account_id, get_dm_room_id, send_message
 from utils.constants import (
-    ACTIVITY_TYPES, MS_LEFT, DATE_FMT_YM, DATE_FMT_YMD,
-    COACHING_TYPE_DEFAULTS, M_STATUS_CAT_COACH,
+    ACTIVITY_TYPES, MS_ACTIVE, MS_LEFT, DATE_FMT_YM, DATE_FMT_YMD,
+    COACHING_TYPE_DEFAULTS, DEFAULT_WELCOME_TEMPLATE,
 )
+from utils.date_helpers import parse_date
 from dateutil.relativedelta import relativedelta
-
-
-def _parse_joined_at(val: str) -> date:
-    """joined_at の文字列を date 型に変換。失敗したら今日を返す。"""
-    if not val:
-        return date.today()
-    # "2022/10/01" 形式（日付あり）
-    try:
-        return datetime.strptime(val, "%Y/%m/%d").date()
-    except ValueError:
-        pass
-    # "2022/10" 形式（月のみ）→ 1日として扱う
-    try:
-        return datetime.strptime(val, "%Y/%m").date()
-    except ValueError:
-        pass
-    # "2022年10月14日" 形式
-    m = re.match(r"(\d{4})年(\d{1,2})月(\d{1,2})日", val)
-    if m:
-        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-    # "2022年10月" 形式（日なし）→ 1日として扱う
-    m = re.match(r"(\d{4})年(\d{1,2})月", val)
-    if m:
-        return date(int(m.group(1)), int(m.group(2)), 1)
-    return date.today()
 
 st.title("会員管理")
 
@@ -47,7 +22,7 @@ status_list = get_m_status("management_status")
 status_options = {s["label"]: s["code"] for s in status_list}
 status_labels = {s["code"]: s["label"] for s in status_list}
 
-DEFAULT_TEMPLATE = "こんにちは。"
+DEFAULT_TEMPLATE = DEFAULT_WELCOME_TEMPLATE
 
 # session_state 初期化
 if "new_member_saved" not in st.session_state:
@@ -75,7 +50,7 @@ with st.sidebar:
     st.header("会員選択")
     mode = st.radio("モード", ["既存会員を編集", "新規追加"])
 
-    selected = None
+    selected_member = None
     if mode == "既存会員を編集":
         name_to_member = {m["display_name"]: m for m in members}
         selected_name = st.selectbox(
@@ -85,15 +60,15 @@ with st.sidebar:
             placeholder="会員名を入力して選択",
         )
         if selected_name:
-            selected = name_to_member[selected_name]
+            selected_member = name_to_member[selected_name]
 
 # モードが切り替わったら保存済み情報をリセット
 if mode == "既存会員を編集":
     st.session_state["new_member_saved"] = None
 
 # --- メインエリア ---
-if mode == "新規追加" or selected:
-    label = "新規追加" if mode == "新規追加" else f"編集: {selected['display_name']}"
+if mode == "新規追加" or selected_member:
+    label = "新規追加" if mode == "新規追加" else f"編集: {selected_member['display_name']}"
     st.subheader(label)
 
     col1, col2, col3 = st.columns(3)
@@ -102,20 +77,20 @@ if mode == "新規追加" or selected:
         st.markdown("**基本情報**")
         display_name = st.text_input(
             "表示名（clean_name）",
-            value=selected["display_name"] if selected else "",
+            value=selected_member["display_name"] if selected_member else "",
             placeholder="表示名を入力してください",
         )
         name = st.text_input(
             "本名（name）",
-            value=selected.get("name") or "" if selected else "",
+            value=selected_member.get("name") or "" if selected_member else "",
             placeholder="本名を入力してください",
         )
-        _ja_default = _parse_joined_at(selected.get("joined_at") or "") if selected else date.today()
+        _ja_default = (parse_date(selected_member.get("joined_at") or "") or date.today()) if selected_member else date.today()
         _ja_date = st.date_input("入会日", value=_ja_default)
         joined_at = _ja_date.strftime(DATE_FMT_YMD)
         left_at = st.text_input(
             "在籍有効期限（YYYY/MM）",
-            value=selected.get("left_at") or "" if selected else "",
+            value=selected_member.get("left_at") or "" if selected_member else "",
             placeholder="例: 2025/03",
         )
 
@@ -123,12 +98,12 @@ if mode == "新規追加" or selected:
         st.markdown("**連絡先**")
         email = st.text_input(
             "メールアドレス",
-            value=selected.get("email") or "" if selected else "",
+            value=selected_member.get("email") or "" if selected_member else "",
             placeholder="メールアドレスを入力してください",
         )
         birthday = st.text_input(
             "誕生日（MM/DD）",
-            value=selected.get("birthday") or "" if selected else "",
+            value=selected_member.get("birthday") or "" if selected_member else "",
             placeholder="例: 04/15",
         )
 
@@ -136,7 +111,7 @@ if mode == "新規追加" or selected:
         st.markdown("**Chatwork**")
         cw_handle = st.text_input(
             "Chatwork ID（ハンドル名）",
-            value=selected.get("chatwork_id") or "" if selected else "",
+            value=selected_member.get("chatwork_id") or "" if selected_member else "",
             placeholder="例: yamada_taro",
             key="cw_handle_input",
         )
@@ -154,15 +129,15 @@ if mode == "新規追加" or selected:
 
         cw_account = st.text_input(
             "Chatwork Account ID（数字）※自動取得後も手動で修正できます",
-            value=selected.get("cw_account") or "" if selected else "",
+            value=selected_member.get("cw_account") or "" if selected_member else "",
             placeholder="数字のアカウントID",
             key="cw_account_input",
         )
 
     with col3:
         st.markdown("**属性・備考**")
-        current_code = selected.get("management_status") if selected else 1
-        current_label = status_labels.get(int(current_code) if current_code is not None else 1, "在籍")
+        current_code = selected_member.get("management_status") if selected_member else MS_ACTIVE
+        current_label = status_labels.get(int(current_code) if current_code is not None else MS_ACTIVE, "在籍")
         status_label = st.selectbox(
             "在籍状況",
             list(status_options.keys()),
@@ -173,13 +148,13 @@ if mode == "新規追加" or selected:
         if mode == "既存会員を編集" and is_taikain:
             left_year = st.text_input(
                 "退会日付",
-                value=selected.get("left_year") or "" if selected else "",
+                value=selected_member.get("left_year") or "" if selected_member else "",
                 placeholder="例: 2025/03/31",
             )
         else:
-            left_year = selected.get("left_year") if selected else None
+            left_year = selected_member.get("left_year") if selected_member else None
 
-        current_activity = selected.get("activity_type") if selected else None
+        current_activity = selected_member.get("activity_type") if selected_member else None
         activity_idx = ACTIVITY_TYPES.index(current_activity) if current_activity in ACTIVITY_TYPES else None
         activity_type = st.selectbox(
             "活動タイプ",
@@ -189,11 +164,11 @@ if mode == "新規追加" or selected:
         )
         is_roadmap_active = st.checkbox(
             "ロードマップ有効",
-            value=bool(int(selected.get("is_roadmap_active") or 0)) if selected else False,
+            value=bool(int(selected_member.get("is_roadmap_active") or 0)) if selected_member else False,
         )
         note = st.text_area(
             "備考",
-            value=selected.get("note") or "" if selected else "",
+            value=selected_member.get("note") or "" if selected_member else "",
             placeholder="備考を入力してください",
         )
 
@@ -211,7 +186,7 @@ if mode == "新規追加" or selected:
         if mode == "既存会員を編集":
             dup_warnings = check_duplicates(
                 display_name, email, cw_handle, members,
-                exclude_id=selected["id"]
+                exclude_id=selected_member["id"]
             )
             for w in dup_warnings:
                 st.warning(f"⚠️ {w}")
@@ -248,8 +223,8 @@ if mode == "新規追加" or selected:
             }
             st.session_state["cw_fetched_account_id"] = ""
         else:
-            sb.table("users_master").update(user_data).eq("id", selected["id"]).execute()
-            sb.table("name_mappings").update({"clean_name": display_name}).eq("user_id", selected["id"]).execute()
+            sb.table("users_master").update(user_data).eq("id", selected_member["id"]).execute()
+            sb.table("name_mappings").update({"clean_name": display_name}).eq("user_id", selected_member["id"]).execute()
             st.success(f"✓ {display_name} を更新しました")
         st.cache_data.clear()
 
@@ -305,9 +280,8 @@ if new_member:
         st.divider()
         st.subheader(f"コーチングチケットを登録（任意） — {new_ticket['name']}")
 
-        _coaches_raw = sb.table("m_status").select("label").eq("category", M_STATUS_CAT_COACH).order("code").execute().data
-        _coach_list  = [c["label"] for c in _coaches_raw]
-        _type_list   = [t for t in COACHING_TYPE_DEFAULTS if t != "追加コーチング"]
+        _coach_list  = [c["label"] for c in get_coaches()]
+        _type_list   = [t for t in COACHING_TYPE_DEFAULTS if t not in ("追加コーチング", "救済コーチング")]
 
         col_t1, col_t2 = st.columns(2)
         with col_t1:
