@@ -1,6 +1,6 @@
 from supabase import create_client, Client
 from utils.secrets import get_secret
-from utils.constants import MS_ACTIVE, MS_PAUSED
+from utils.constants import MS_ACTIVE, MS_PAUSED, M_STATUS_CAT_COACH
 
 _client: Client | None = None
 
@@ -26,6 +26,13 @@ def get_members(active_only: bool = False) -> list[dict]:
         nm = mappings.get(u["id"], {})
         u["display_name"] = nm.get("clean_name") or u["name"] or ""
     return sorted(users, key=lambda x: x["joined_at"] or "")
+
+
+def get_coaches(include_room_id: bool = False) -> list[dict]:
+    """コーチ一覧を返す。include_room_id=True で room_id も含む。"""
+    sb = get_client()
+    fields = "label, room_id" if include_room_id else "label"
+    return sb.table("m_status").select(fields).eq("category", M_STATUS_CAT_COACH).order("code").execute().data
 
 
 def get_m_status(category: str) -> list[dict]:

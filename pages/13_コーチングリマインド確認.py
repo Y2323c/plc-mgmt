@@ -1,48 +1,21 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import re
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime, timedelta
 
-from utils.supabase_client import get_client
+from utils.supabase_client import get_client, get_coaches
 from utils.chatwork import send_message
 from utils.secrets import get_secret
-from utils.constants import LOG_TYPE_SESSION, M_STATUS_CAT_COACH, COACHING_COMPLETION_ROOM_ID
+from utils.constants import LOG_TYPE_SESSION, COACHING_COMPLETION_ROOM_ID
+from utils.date_helpers import parse_date
+from utils.coaching_config import REMINDERS, build_reminder_message
 from utils.style import apply_style
 
 apply_style()
 
-# ── リマインドスケジュール（coaching_reminder.py と同一定義）──────────────
-REMINDERS = {
-    "新規コーチング": [
-        {"day": 140, "months": 5,  "session": 5},
-        {"day": 230, "months": 8,  "session": 6},
-        {"day": 320, "months": 11, "session": 7},
-    ],
-    "継続コーチング": [
-        {"day":  80, "months": 3, "session": 1},
-        {"day": 230, "months": 8, "session": 2},
-    ],
-}
 
-
-def _parse_date(val: str) -> date | None:
-    if not val:
-        return None
-    for fmt in ("%Y/%m/%d", "%Y/%m"):
-        try:
-            return datetime.strptime(val, fmt).date()
-        except ValueError:
-            pass
-    m = re.match(r"(\d{4})年(\d{1,2})月(\d{1,2})日", val)
-    if m:
-        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-    m = re.match(r"(\d{4})年(\d{1,2})月", val)
-    if m:
-        return date(int(m.group(1)), int(m.group(2)), 1)
-    return None
 
 
 def _status_label(elapsed: int, reminder_day: int, session_done: bool) -> str:
@@ -69,22 +42,6 @@ def _sort_key(label: str) -> int:
     return 9999
 
 
-def _build_message(coaching_type: str, months: int, session_num: int,
-                   member_name: str, coach_name: str) -> str:
-    base = f"TO {coach_name}\nTO {member_name}\n"
-    if coaching_type == "新規コーチング":
-        return (
-            base
-            + f"あと10日で入会{months}ヶ月を迎えます。\n"
-            + f"{session_num}回目のコーチングの日時の調整をお願いいたします。"
-        )
-    else:
-        return (
-            base
-            + f"あと10日で継続{months}ヶ月を迎えます。\n"
-            + f"{session_num}回目のコーチングの日時の調整をお願いいたします。\n"
-            + "ローンチの状況に合わせて、2ヶ月以内を目安にコーチングを行なってください。"
-        )
 
 
 # ── データ取得 ───────────────────────────────────────────────────────────
@@ -119,10 +76,7 @@ with st.container(border=True):
 st.divider()
 
 # コーチ一覧（room_id も取得）
-coaches_raw = (
-    sb.table("m_status").select("label,room_id")
-    .eq("category", M_STATUS_CAT_COACH).order("code").execute().data
-)
+coaches_raw = get_coaches(include_room_id=True)
 all_coaches = [c["label"] for c in coaches_raw]
 coach_rooms = {c["label"]: c.get("room_id") for c in coaches_raw}
 
@@ -188,7 +142,7 @@ for ticket in tickets:
     else:
         ref_str = ticket.get("start_date")
 
-    ref_date = _parse_date(ref_str or "")
+    ref_date = parse_date(ref_str or "")
     if not ref_date:
         ref_display = f"⚠️ 取得不可（{ref_str!r}）"
         elapsed = None
@@ -329,7 +283,7 @@ else:
                 if not room_id:
                     results.append(f"❌ {r['名前']}（{r['コーチ']}：room_id 未設定）")
                     continue
-                msg = _build_message(r["種別"], r["_months"], r["_session_num"],
+                msg = build_reminder_message(r["種別"], r["_months"], r["_session_num"],
                                      r["名前"], r["コーチ"])
                 ok  = send_message(str(room_id), msg, token=token or None)
                 results.append(f"{'✅' if ok else '❌'} {r['名前']}（{r['コーチ']}コーチ）{r['_session_num']}回目")

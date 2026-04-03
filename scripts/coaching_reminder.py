@@ -13,70 +13,16 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import re
 from datetime import date, datetime, timedelta
 
 from utils.supabase_client import get_client
 from utils.chatwork import send_message
 from utils.secrets import get_secret
 from utils.constants import LOG_TYPE_SESSION, COACHING_COMPLETION_ROOM_ID
-
-# ── リマインドスケジュール ────────────────────────────────────────────────
-# day    : 基準日からの経過日数（この日に送信）
-# months : メッセージ内の「〇ヶ月」
-# session: まだ実施されていないと判定するセッション番号
-
-REMINDERS = {
-    "新規コーチング": [
-        {"day": 140, "months": 5,  "session": 5},  # 5ヶ月目に5回目
-        {"day": 230, "months": 8,  "session": 6},  # 8ヶ月目に6回目
-        {"day": 320, "months": 11, "session": 7},  # 11ヶ月目に7回目
-    ],
-    "継続コーチング": [
-        {"day":  80, "months": 3, "session": 1},  # 4ヶ月目に1回目
-        {"day": 230, "months": 8, "session": 2},  # 9ヶ月目に2回目
-    ],
-}
+from utils.date_helpers import parse_date
+from utils.coaching_config import REMINDERS, build_reminder_message
 
 
-def _parse_date(val: str) -> date | None:
-    """文字列を date に変換。YYYY/MM/DD・YYYY/MM・日本語形式に対応。"""
-    if not val:
-        return None
-    for fmt in ("%Y/%m/%d", "%Y/%m"):
-        try:
-            return datetime.strptime(val, fmt).date()
-        except ValueError:
-            pass
-    m = re.match(r"(\d{4})年(\d{1,2})月(\d{1,2})日", val)
-    if m:
-        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-    m = re.match(r"(\d{4})年(\d{1,2})月", val)
-    if m:
-        return date(int(m.group(1)), int(m.group(2)), 1)
-    return None
-
-
-def _build_message(coaching_type: str, months: int, session_num: int,
-                   member_name: str, coach_name: str) -> str:
-    """リマインドメッセージ本文を生成する。"""
-    base = (
-        f"TO {coach_name}\n"
-        f"TO {member_name}\n"
-    )
-    if coaching_type == "新規コーチング":
-        return (
-            base
-            + f"あと10日で入会{months}ヶ月を迎えます。\n"
-            + f"{session_num}回目のコーチングの日時の調整をお願いいたします。"
-        )
-    else:  # 継続コーチング
-        return (
-            base
-            + f"あと10日で継続{months}ヶ月を迎えます。\n"
-            + f"{session_num}回目のコーチングの日時の調整をお願いいたします。\n"
-            + "ローンチの状況に合わせて、2ヶ月以内を目安にコーチングを行なってください。"
-        )
 
 
 def _collect_targets(sb, check_date: date) -> list[dict]:
@@ -128,7 +74,7 @@ def _collect_targets(sb, check_date: date) -> list[dict]:
         else:
             ref_str = ticket.get("start_date")
 
-        ref_date = _parse_date(ref_str or "")
+        ref_date = parse_date(ref_str or "")
         if not ref_date:
             continue
 
@@ -282,7 +228,7 @@ def run():
         else:  # 継続コーチング
             ref_str = ticket.get("start_date")
 
-        ref_date = _parse_date(ref_str or "")
+        ref_date = parse_date(ref_str or "")
         if not ref_date:
             print(f"  ⚠ {member_name}: 基準日が取得できません（{ref_str!r}）。スキップ。")
             continue
@@ -322,7 +268,7 @@ def run():
                 print(f"  ⚠ {coach_name}: room_id が未設定。スキップ。")
                 continue
 
-            msg = _build_message(coaching_type, reminder["months"], session_num,
+            msg = build_reminder_message(coaching_type, reminder["months"], session_num,
                                  member_name, coach_name)
             ok = send_message(str(room_id), msg, token=token or None)
             status = "✅ 送信" if ok else "❌ 失敗"

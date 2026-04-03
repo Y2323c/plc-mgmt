@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 from utils.supabase_client import get_members
+from utils.constants import MS_ACTIVE, MS_PAUSED
 
 
 def member_selectbox(
@@ -31,7 +32,7 @@ def member_selectbox(
     if show_all:
         filtered = all_members
     else:
-        filtered = [m for m in all_members if m.get("management_status") in (1, 2)]
+        filtered = [m for m in all_members if m.get("management_status") in (MS_ACTIVE, MS_PAUSED)]
 
     name_to_member = {m["display_name"]: m for m in filtered}
 

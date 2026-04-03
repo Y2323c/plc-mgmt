@@ -5,11 +5,11 @@ import uuid
 from datetime import date
 import streamlit as st
 import pandas as pd
-from utils.supabase_client import get_client, insert_record
+from utils.supabase_client import get_client, insert_record, get_coaches
 from utils.ui_helpers import member_selectbox
 from utils.chatwork import send_message
 from utils.secrets import get_secret
-from utils.constants import M_STATUS_CAT_COACH, LOG_TYPE_SESSION, LOG_TYPE_MEMO, DATE_FMT_YMD, COACHING_COMPLETION_ROOM_ID
+from utils.constants import LOG_TYPE_SESSION, LOG_TYPE_MEMO, DATE_FMT_YMD, COACHING_COMPLETION_ROOM_ID
 
 COACHING_CW_TOKEN = get_secret("CHATWORK_COACHING_API_TOKEN")
 
@@ -23,8 +23,7 @@ if st.session_state.pop("_ticket_completed", False):
 sb = get_client()
 
 # --- コーチ一覧取得 ---
-_coaches_raw = sb.table("m_status").select("label").eq("category", M_STATUS_CAT_COACH).order("code").execute().data
-COACH_LIST = [c["label"] for c in _coaches_raw]
+COACH_LIST = [c["label"] for c in get_coaches()]
 
 # --- サイドバー ---
 with st.sidebar:
@@ -110,30 +109,33 @@ with tab_session:
             submitted_session = st.form_submit_button("保存", type="primary")
 
         if submitted_session:
-            insert_record("coaching_logs", {
-                "id":                str(uuid.uuid4()),
-                "ticket_id":         selected_ticket["id"],
-                "user_id":           selected_member["id"],
-                "name":              selected_member["display_name"],
-                "log_type":          LOG_TYPE_SESSION,
-                "session_count":     next_session,
-                "term_count":        selected_ticket["term_count"],
-                "session_date":      session_date.strftime(DATE_FMT_YMD),
-                "next_session_date": next_session_date.strftime(DATE_FMT_YMD) if next_session_date else None,
-                "coach_name":        coach_name or None,
-                "note":              note or None,
-                "created_at":        date.today().strftime(DATE_FMT_YMD),
-            })
-            if max_sessions > 0 and next_session >= max_sessions:
-                get_client().table("coaching_tickets").update({"is_active": 0}).eq("id", selected_ticket["id"]).execute()
-                completion_msg = (
-                    f"{selected_member['display_name']}様の{selected_ticket.get('coaching_type', '')} {max_sessions}回"
-                    f"（担当：{coach_name}）が全セッションを完了しました"
-                )
-                send_message(COACHING_COMPLETION_ROOM_ID, completion_msg, token=COACHING_CW_TOKEN or None)
-                st.session_state["_ticket_completed"] = True
-            st.session_state["_toast"] = f"✓ 第{next_session}回セッション記録を保存しました"
-            st.rerun()
+            try:
+                insert_record("coaching_logs", {
+                    "id":                str(uuid.uuid4()),
+                    "ticket_id":         selected_ticket["id"],
+                    "user_id":           selected_member["id"],
+                    "name":              selected_member["display_name"],
+                    "log_type":          LOG_TYPE_SESSION,
+                    "session_count":     next_session,
+                    "term_count":        selected_ticket["term_count"],
+                    "session_date":      session_date.strftime(DATE_FMT_YMD),
+                    "next_session_date": next_session_date.strftime(DATE_FMT_YMD) if next_session_date else None,
+                    "coach_name":        coach_name or None,
+                    "note":              note or None,
+                    "created_at":        date.today().strftime(DATE_FMT_YMD),
+                })
+                if max_sessions > 0 and next_session >= max_sessions:
+                    get_client().table("coaching_tickets").update({"is_active": 0}).eq("id", selected_ticket["id"]).execute()
+                    completion_msg = (
+                        f"{selected_member['display_name']}様の{selected_ticket.get('coaching_type', '')} {max_sessions}回"
+                        f"（担当：{coach_name}）が全セッションを完了しました"
+                    )
+                    send_message(COACHING_COMPLETION_ROOM_ID, completion_msg, token=COACHING_CW_TOKEN or None)
+                    st.session_state["_ticket_completed"] = True
+                st.session_state["_toast"] = f"✓ 第{next_session}回セッション記録を保存しました"
+                st.rerun()
+            except Exception as e:
+                st.error(f"保存に失敗しました: {e}")
 
 # ── メモ ──
 with tab_memo:

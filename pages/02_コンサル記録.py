@@ -10,6 +10,9 @@ from utils.constants import CONSULT_TYPES, CAT_CONSULT, ST_ATTENDED
 
 st.title("コンサル記録")
 
+if "_toast" in st.session_state:
+    st.toast(st.session_state.pop("_toast"), icon="✅")
+
 sb = get_client()
 
 # --- サイドバー ---
@@ -68,5 +71,5 @@ if submitted:
         "event_id": None,
         "note": note or None,
     })
-    st.success(f"✓ {consult_type}コンサル（{consult_date}）を記録しました")
+    st.session_state["_toast"] = f"✓ {consult_type}コンサル（{consult_date}）を記録しました"
     st.rerun()
