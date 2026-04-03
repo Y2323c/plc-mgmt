@@ -252,6 +252,8 @@ with tab_progress:
             row["該当月の回数"] = month_count
         rows.append(row)
 
+    rows.sort(key=lambda x: x["最終セッション日"] if x["最終セッション日"] != "—" else "", reverse=True)
+    rows.sort(key=lambda x: 1 if not x["種別"] else 0)
     if rows:
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
     else:
