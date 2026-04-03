@@ -100,10 +100,12 @@ ticket_sessions: dict[str, list] = defaultdict(list)
 for l in session_logs:
     ticket_sessions[l["ticket_id"]].append(l)
 
+_ticket_to_uid = {t["id"]: t["user_id"] for t in all_tickets}
 uid_all_logs: dict[str, list] = defaultdict(list)
 for l in all_logs:
-    if l["ticket_id"] in filtered_ids:
-        uid_all_logs[l["user_id"]].append(l)
+    uid = l["user_id"] or _ticket_to_uid.get(l["ticket_id"])
+    if uid:
+        uid_all_logs[uid].append(l)
 
 # ── タブ ────────────────────────────────────────────
 tab_coach, tab_progress, tab_memos, tab_history = st.tabs([
