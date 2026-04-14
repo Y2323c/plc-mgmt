@@ -89,6 +89,7 @@ def _section_upcoming(sb, today: date) -> str:
         sb.table("coaching_tickets")
         .select("*")
         .eq("is_active", 1)
+        .eq("send_reminder", True)
         .in_("coaching_type", list(REMINDERS.keys()))
         .execute()
         .data
