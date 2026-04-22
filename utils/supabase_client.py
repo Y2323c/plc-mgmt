@@ -102,7 +102,7 @@ def insert_record(table: str, data: dict) -> None:
 
 
 def update_record(table: str, match: dict, data: dict) -> None:
-    q = get_client().table(table)
+    q = get_client().table(table).update(data)
     for col, val in match.items():
         q = q.eq(col, val)
-    q.update(data).execute()
+    q.execute()

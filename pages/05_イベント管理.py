@@ -17,12 +17,6 @@ sb = get_client()
 # --- イベント一覧 ---
 events = get_events()
 
-st.subheader(f"イベント一覧（{len(events)}件）")
-
-show_dataframe(events, {"カテゴリ": "category", "日付": "event_date", "ラベル": "label", "メモ": "note"})
-
-st.divider()
-
 # --- 操作選択 ---
 col_new, col_edit = st.columns(2)
 
@@ -80,3 +74,9 @@ with col_edit:
                     })
                     st.session_state["_toast"] = f"✓ 更新しました: {edit_label}"
                     st.rerun()
+
+st.divider()
+
+st.subheader(f"イベント一覧（{len(events)}件）")
+
+show_dataframe(events, {"カテゴリ": "category", "日付": "event_date", "ラベル": "label", "メモ": "note"})

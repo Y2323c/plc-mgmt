@@ -13,6 +13,10 @@ REMINDERS = {
         {"day":  80, "months": 3, "session": 1},
         {"day": 230, "months": 8, "session": 2},
     ],
+    "救済コーチング": [
+        {"day":  80, "months": 3, "session": 1},
+        {"day": 230, "months": 8, "session": 2},
+    ],
 }
 
 
@@ -24,6 +28,11 @@ def build_reminder_message(coaching_type: str, months: int, session_num: int,
         return (
             base
             + f"あと10日で入会{months}ヶ月を迎えます。\n"
+            + f"{session_num}回目のコーチングの日時の調整をお願いいたします。"
+        )
+    elif coaching_type == "救済コーチング":
+        return (
+            base
             + f"{session_num}回目のコーチングの日時の調整をお願いいたします。"
         )
     else:  # 継続コーチング
