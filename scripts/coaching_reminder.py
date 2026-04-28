@@ -8,7 +8,9 @@
 動作:
     - 有効チケット（is_active=1）の新規・継続コーチングを全件チェック
     - 基準日からの経過日数がリマインド日と一致した場合
-    - 対象セッションが未消化の場合のみ、コーチのグループチャットへ通知
+    - 対象セッションが未消化の場合のみ通知
+      ・新規/継続コーチング → コーチのグループチャット
+      ・救済コーチング     → 運用者専用ルーム（COACHING_COMPLETION_ROOM_ID）
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -29,12 +31,13 @@ def _collect_targets(sb, check_date: date) -> list[dict]:
     """check_date の経過日数でリマインドが発火するターゲットを収集して返す。"""
     coach_rows = (
         sb.table("m_status")
-        .select("label,room_id")
+        .select("label,room_id,account_id")
         .eq("category", "coach")
         .execute()
         .data
     )
-    coach_rooms = {row["label"]: row.get("room_id") for row in coach_rows}
+    coach_rooms      = {row["label"]: row.get("room_id")    for row in coach_rows}
+    coach_account_ids = {row["label"]: row.get("account_id") for row in coach_rows}
 
     tickets = (
         sb.table("coaching_tickets")
@@ -45,7 +48,7 @@ def _collect_targets(sb, check_date: date) -> list[dict]:
         .data
     )
 
-    user_cache: dict[str, str | None] = {}
+    user_cache: dict[str, dict] = {}  # user_id → {joined_at, cw_account}
     targets = []
 
     for ticket in tickets:
@@ -59,18 +62,25 @@ def _collect_targets(sb, check_date: date) -> list[dict]:
         if not ticket.get("send_reminder", True):
             continue
 
+        # users_master から joined_at と cw_account を取得（キャッシュ）
+        if user_id not in user_cache:
+            u = (
+                sb.table("users_master")
+                .select("joined_at,cw_account")
+                .eq("id", user_id)
+                .maybe_single()
+                .execute()
+                .data
+            ) or {}
+            user_cache[user_id] = {
+                "joined_at":  u.get("joined_at"),
+                "cw_account": u.get("cw_account"),
+            }
+
+        member_account_id = user_cache[user_id].get("cw_account") or None
+
         if coaching_type == "新規コーチング":
-            if user_id not in user_cache:
-                u = (
-                    sb.table("users_master")
-                    .select("joined_at")
-                    .eq("id", user_id)
-                    .maybe_single()
-                    .execute()
-                    .data
-                )
-                user_cache[user_id] = (u or {}).get("joined_at")
-            ref_str = user_cache[user_id]
+            ref_str = user_cache[user_id].get("joined_at")
         else:
             ref_str = ticket.get("start_date")
 
@@ -99,13 +109,20 @@ def _collect_targets(sb, check_date: date) -> list[dict]:
             session_num = reminder["session"]
             if session_num in done_sessions:
                 continue
+            # 救済コーチングは運用者専用ルーム、それ以外はコーチグループルーム
+            if coaching_type == "救済コーチング":
+                room_id = COACHING_COMPLETION_ROOM_ID
+            else:
+                room_id = coach_rooms.get(coach_name)
             targets.append({
-                "member_name":   member_name,
-                "coach_name":    coach_name,
-                "coaching_type": coaching_type,
-                "session_num":   session_num,
-                "months":        reminder["months"],
-                "room_id":       coach_rooms.get(coach_name),
+                "member_name":        member_name,
+                "coach_name":         coach_name,
+                "coaching_type":      coaching_type,
+                "session_num":        session_num,
+                "months":             reminder["months"],
+                "room_id":            room_id,
+                "member_account_id":  member_account_id,
+                "coach_account_id":   coach_account_ids.get(coach_name),
             })
 
     return targets
@@ -164,15 +181,16 @@ def run():
         print(f"[{today}] スキップフラグあり。送信をキャンセルします。")
         return
 
-    # コーチ別 Chatwork グループ room_id を取得
+    # コーチ別 Chatwork グループ room_id・account_id を取得
     coach_rows = (
         sb.table("m_status")
-        .select("label,room_id")
+        .select("label,room_id,account_id")
         .eq("category", "coach")
         .execute()
         .data
     )
-    coach_rooms = {row["label"]: row.get("room_id") for row in coach_rows}
+    coach_rooms       = {row["label"]: row.get("room_id")    for row in coach_rows}
+    coach_account_ids = {row["label"]: row.get("account_id") for row in coach_rows}
 
     # 有効な新規・継続チケットを全件取得
     tickets = (
@@ -195,8 +213,8 @@ def run():
     )
     skip_target_set = {(r["ticket_id"], r["session_num"]) for r in skip_targets_data}
 
-    # user_id → joined_at のキャッシュ（新規コーチング用）
-    user_cache: dict[str, str | None] = {}
+    # user_id → {joined_at, cw_account} のキャッシュ
+    user_cache: dict[str, dict] = {}
 
     sent_count = 0
 
@@ -212,20 +230,27 @@ def run():
             print(f"  ✓ {member_name}: リマインド無効（旧制度）。スキップ。")
             continue
 
+        # users_master から joined_at・cw_account を取得（キャッシュ）
+        if user_id not in user_cache:
+            u = (
+                sb.table("users_master")
+                .select("joined_at,cw_account")
+                .eq("id", user_id)
+                .maybe_single()
+                .execute()
+                .data
+            ) or {}
+            user_cache[user_id] = {
+                "joined_at":  u.get("joined_at"),
+                "cw_account": u.get("cw_account"),
+            }
+
+        member_account_id = user_cache[user_id].get("cw_account") or None
+
         # 基準日を取得
         if coaching_type == "新規コーチング":
-            if user_id not in user_cache:
-                u = (
-                    sb.table("users_master")
-                    .select("joined_at")
-                    .eq("id", user_id)
-                    .maybe_single()
-                    .execute()
-                    .data
-                )
-                user_cache[user_id] = (u or {}).get("joined_at")
-            ref_str = user_cache[user_id]
-        else:  # 継続コーチング
+            ref_str = user_cache[user_id].get("joined_at")
+        else:
             ref_str = ticket.get("start_date")
 
         ref_date = parse_date(ref_str or "")
@@ -263,17 +288,28 @@ def run():
                 print(f"  ✓ {member_name}: {session_num}回目はスキップ対象。送信しません。")
                 continue
 
-            room_id = coach_rooms.get(coach_name)
+            # 救済コーチングは運用者専用ルーム、それ以外はコーチグループルーム
+            if coaching_type == "救済コーチング":
+                room_id = COACHING_COMPLETION_ROOM_ID
+                dest_label = "運用者ルーム"
+            else:
+                room_id = coach_rooms.get(coach_name)
+                dest_label = f"{coach_name}グループ"
+
             if not room_id:
                 print(f"  ⚠ {coach_name}: room_id が未設定。スキップ。")
                 continue
 
-            msg = build_reminder_message(coaching_type, reminder["months"], session_num,
-                                 member_name, coach_name)
+            msg = build_reminder_message(
+                coaching_type, reminder["months"], session_num,
+                member_name, coach_name,
+                member_account_id=member_account_id,
+                coach_account_id=coach_account_ids.get(coach_name),
+            )
             ok = send_message(str(room_id), msg, token=token or None)
             status = "✅ 送信" if ok else "❌ 失敗"
             print(
-                f"  {status} → {coach_name}グループ | "
+                f"  {status} → {dest_label} | "
                 f"{member_name} {session_num}回目 ({coaching_type})"
             )
             if ok:

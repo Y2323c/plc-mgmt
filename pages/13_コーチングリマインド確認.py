@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from utils.supabase_client import get_client, get_coaches
 from utils.chatwork import send_message
 from utils.secrets import get_secret
-from utils.constants import LOG_TYPE_SESSION, COACHING_COMPLETION_ROOM_ID
+from utils.constants import LOG_TYPE_SESSION, COACHING_COMPLETION_ROOM_ID, M_STATUS_CAT_COACH
 from utils.date_helpers import parse_date
 from utils.coaching_config import REMINDERS, build_reminder_message
 from utils.style import apply_style
@@ -61,24 +61,15 @@ skip_data = (
 skip_row = bool(skip_data)
 
 with st.container(border=True):
-    if skip_row:
-        st.warning(f"⏸ 今日（{today.strftime('%Y/%m/%d')}）の自動送信はキャンセル済みです")
-        if st.button("キャンセルを取り消す（自動送信を再開）"):
-            sb.table("reminder_skip_dates").delete().eq("skip_date", str(today)).execute()
-            st.rerun()
-    else:
-        col_s1, col_s2 = st.columns([3, 1])
-        col_s1.info(f"▶️ 今日（{today.strftime('%Y/%m/%d')}）の自動送信：予定あり（18:00）")
-        if col_s2.button("全キャンセル", use_container_width=True):
-            sb.table("reminder_skip_dates").insert({"skip_date": str(today)}).execute()
-            st.rerun()
+    st.caption("⏸ 自動送信（18:00）は現在停止中。このページから手動で送信してください。")
 
 st.divider()
 
-# コーチ一覧（room_id も取得）
-coaches_raw = get_coaches(include_room_id=True)
-all_coaches = [c["label"] for c in coaches_raw]
-coach_rooms = {c["label"]: c.get("room_id") for c in coaches_raw}
+# コーチ一覧（room_id・account_id も取得）
+coaches_raw       = get_coaches(include_room_id=True, include_account_id=True)
+all_coaches       = [c["label"] for c in coaches_raw]
+coach_rooms       = {c["label"]: c.get("room_id")    for c in coaches_raw}
+coach_account_ids = {c["label"]: c.get("account_id") for c in coaches_raw}
 
 # フィルター
 col_f1, col_f2 = st.columns([2, 3])
@@ -99,15 +90,17 @@ tickets = (
     .execute().data
 )
 
-# user_id → joined_at キャッシュ
-user_ids = list({t["user_id"] for t in tickets if t.get("coaching_type") == "新規コーチング"})
-user_cache: dict[str, str | None] = {}
-if user_ids:
+# user_id → {joined_at, cw_account} キャッシュ（全チケット対象）
+all_user_ids = list({t["user_id"] for t in tickets if t.get("user_id")})
+user_cache: dict[str, dict] = {}
+if all_user_ids:
     users = (
-        sb.table("users_master").select("id,joined_at")
-        .in_("id", user_ids).execute().data
+        sb.table("users_master").select("id,joined_at,cw_account")
+        .in_("id", all_user_ids).execute().data
     )
-    user_cache = {u["id"]: u.get("joined_at") for u in users}
+    user_cache = {u["id"]: {"joined_at": u.get("joined_at"), "cw_account": u.get("cw_account")} for u in users}
+
+# コーチ account_id は後の coaches_raw で取得（重複取得を避けるため削除）
 
 # セッションログを一括取得
 ticket_ids = [t["id"] for t in tickets]
@@ -129,16 +122,18 @@ for log in all_logs:
 # ── テーブル構築（pass 1）────────────────────────────────────────────────
 rows = []
 for ticket in tickets:
-    coaching_type = ticket.get("coaching_type", "")
-    coach_name    = ticket.get("coach_name", "")
-    member_name   = ticket.get("name", "")
-    ticket_id     = ticket["id"]
+    coaching_type     = ticket.get("coaching_type", "")
+    coach_name        = ticket.get("coach_name", "")
+    member_name       = ticket.get("name", "")
+    ticket_id         = ticket["id"]
+    user_id           = ticket.get("user_id", "")
+    member_account_id = (user_cache.get(user_id) or {}).get("cw_account") or None
 
     if coach_filter != "全コーチ" and coach_name != coach_filter:
         continue
 
     if coaching_type == "新規コーチング":
-        ref_str = user_cache.get(ticket["user_id"])
+        ref_str = (user_cache.get(user_id) or {}).get("joined_at")
     else:
         ref_str = ticket.get("start_date")
 
@@ -168,20 +163,21 @@ for ticket in tickets:
             remind_date_obj = None
 
         rows.append({
-            "_sort":            _sort_key(status) if elapsed is not None else 9998,
-            "_months":          months,
-            "_ticket_id":       ticket_id,
-            "_session_num":     session_num,
-            "_remind_date_raw": remind_date_obj,
-            "スキップ":         False,   # pass 2 で上書き
-            "名前":             member_name,
-            "コーチ":           coach_name,
-            "種別":             coaching_type,
-            "基準日":           ref_display,
-            "経過日数":         elapsed if elapsed is not None else "—",
-            "対象回":           f"{session_num}回目",
-            "リマインド日":     remind_date,
-            "状況":             status,
+            "_sort":              _sort_key(status) if elapsed is not None else 9998,
+            "_months":            months,
+            "_ticket_id":         ticket_id,
+            "_session_num":       session_num,
+            "_remind_date_raw":   remind_date_obj,
+            "_member_account_id": member_account_id,
+            "スキップ":           False,   # pass 2 で上書き
+            "名前":               member_name,
+            "コーチ":             coach_name,
+            "種別":               coaching_type,
+            "基準日":             ref_display,
+            "経過日数":           elapsed if elapsed is not None else "—",
+            "対象回":             f"{session_num}回目",
+            "リマインド日":       remind_date,
+            "状況":               status,
         })
 
 # ステータスフィルター
@@ -268,37 +264,83 @@ else:
         else:
             st.toast("変更はありませんでした", icon="ℹ️")
 
-    # 手動送信セクション
+    # ── 手動送信セクション ────────────────────────────────────────────────
     st.divider()
-    sendable = [r for r in rows if not r["スキップ"] and "今日" in r["状況"]]
-    if sendable:
-        st.markdown("**📤 今日のリマインド送信対象**（スキップにチェックした人は除外済み）")
-        for r in sendable:
-            st.markdown(f"- {r['名前']}（{r['コーチ']}コーチ）｜{r['種別']} {r['_session_num']}回目 {r['状況']}")
-        if st.button(f"リマインドを今すぐ送信（{len(sendable)}件）", type="primary"):
-            token = get_secret("CHATWORK_COACHING_API_TOKEN")
-            results = []
-            for r in sendable:
-                room_id = coach_rooms.get(r["コーチ"])
-                if not room_id:
-                    results.append(f"❌ {r['名前']}（{r['コーチ']}：room_id 未設定）")
-                    continue
-                msg = build_reminder_message(r["種別"], r["_months"], r["_session_num"],
-                                     r["名前"], r["コーチ"])
-                ok  = send_message(str(room_id), msg, token=token or None)
-                results.append(f"{'✅' if ok else '❌'} {r['名前']}（{r['コーチ']}コーチ）{r['_session_num']}回目")
-                # 送信成功した行をスキップ登録（18:00の自動送信で二重送信しない）
-                if ok and r["_remind_date_raw"] is not None:
-                    sb.table("reminder_skip_targets").upsert({
-                        "skip_date":   str(r["_remind_date_raw"]),
-                        "ticket_id":   r["_ticket_id"],
-                        "session_num": r["_session_num"],
-                    }).execute()
-            st.write("---")
-            for line in results:
-                st.write(line)
+    st.markdown("### 📤 手動送信")
+
+    # 今日・超過かつ未消化・スキップなしを対象候補とする
+    send_candidates = [
+        r for r in rows
+        if not r["スキップ"] and ("今日" in r["状況"] or "超過" in r["状況"])
+    ]
+
+    if not send_candidates:
+        st.caption("送信対象はありません（全員消化済み・スキップ済み、または対象日未到達）")
     else:
-        st.caption("今日の送信対象はありません（全員スキップ済みか、対象なし）")
+        st.caption(f"送信対象候補：{len(send_candidates)}件　｜　チェックを外すと送信しません")
+
+        # 各人のチェックボックス＋メッセージ編集エリア
+        send_flags: dict[int, bool] = {}
+        edited_msgs: dict[int, str] = {}
+        for i, r in enumerate(send_candidates):
+            default_msg = build_reminder_message(
+                r["種別"], r["_months"], r["_session_num"], r["名前"], r["コーチ"],
+                member_account_id=r.get("_member_account_id"),
+                coach_account_id=coach_account_ids.get(r["コーチ"]),
+            )
+            col_chk, col_detail = st.columns([1, 11])
+            send_flags[i] = col_chk.checkbox("", value=True, key=f"send_sel_{i}")
+            label = (
+                f"**{r['名前']}**（{r['コーチ']}コーチ）"
+                f"｜{r['種別']} {r['_session_num']}回目　{r['状況']}"
+            )
+            with col_detail.expander(label):
+                edited_msgs[i] = st.text_area(
+                    "送信内容（編集可）",
+                    value=default_msg,
+                    height=150,
+                    key=f"msg_edit_{i}",
+                )
+
+        selected_with_idx = [(i, r) for i, r in enumerate(send_candidates) if send_flags.get(i)]
+
+        st.write("")
+        if selected_with_idx:
+            if st.button(f"選択した {len(selected_with_idx)} 名に送信", type="primary"):
+                token = get_secret("CHATWORK_COACHING_API_TOKEN")
+                results = []
+                for i, r in selected_with_idx:
+                    # 救済コーチングは運用者専用ルーム、それ以外はコーチグループルーム
+                    if r["種別"] == "救済コーチング":
+                        room_id = COACHING_COMPLETION_ROOM_ID
+                        dest    = "運用者ルーム"
+                    else:
+                        room_id = coach_rooms.get(r["コーチ"])
+                        dest    = f"{r['コーチ']}グループ"
+
+                    if not room_id:
+                        results.append(f"❌ {r['名前']}（{r['コーチ']}：room_id 未設定）")
+                        continue
+
+                    # 編集済みメッセージを使用
+                    msg = edited_msgs.get(i, "")
+                    ok = send_message(str(room_id), msg, token=token or None)
+                    results.append(
+                        f"{'✅' if ok else '❌'} {r['名前']}（→ {dest}）"
+                        f"　{r['種別']} {r['_session_num']}回目"
+                    )
+                    # 送信成功した行をスキップ登録
+                    if ok and r["_remind_date_raw"] is not None:
+                        sb.table("reminder_skip_targets").upsert({
+                            "skip_date":   str(r["_remind_date_raw"]),
+                            "ticket_id":   r["_ticket_id"],
+                            "session_num": r["_session_num"],
+                        }).execute()
+                st.divider()
+                for line in results:
+                    st.write(line)
+        else:
+            st.caption("送信する人が選択されていません（チェックボックスを確認してください）")
 
     # サマリー
     st.divider()
