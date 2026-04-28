@@ -20,5 +20,6 @@ pg = st.navigation([
     st.Page("pages/04_コーチング記録.py",     title="コーチング記録（編集、メモなど） — 事務局入力用", icon="⚫"),
     st.Page("pages/12_コーチング進捗.py",     title="コーチング進捗 — セッション状況確認",          icon="⚫"),
     st.Page("pages/13_コーチングリマインド確認.py", title="コーチングリマインド — 対象者確認",        icon="⚫"),
+    st.Page("pages/16_活動タイプ管理.py",           title="活動タイプ管理 — 回答状況確認",             icon="⚫"),
 ])
 pg.run()

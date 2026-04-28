@@ -3,6 +3,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import streamlit as st
 from utils.supabase_client import get_members, update_record
+from utils.chatwork import send_message
+from utils.secrets import get_secret
+from utils.constants import COACHING_COMPLETION_ROOM_ID
 from utils.style import apply_style
 
 apply_style()
@@ -68,6 +71,12 @@ if submitted:
     else:
         user_id = member_options[selected_name]
         update_record("users_master", {"id": user_id}, {"activity_type": selected_type})
+
+        # 通知送信
+        token = get_secret("CHATWORK_COACHING_API_TOKEN")
+        msg = f"【活動タイプ選択】\n{selected_name}さんが「{selected_type}」を選択しました。"
+        send_message(COACHING_COMPLETION_ROOM_ID, msg, token=token or None)
+
         st.session_state["activity_submitted"] = True
         st.session_state["activity_selected_type"] = selected_type
         st.session_state["activity_selected_name"] = selected_name
